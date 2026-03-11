@@ -76,6 +76,8 @@ Focus on:
   return JSON.parse(jsonText) as WebsiteAnalysis;
 }
 
+export type ToneVariant = 'standard' | 'less_salesy' | 'more_helpful' | 'direct';
+
 export interface ReplyGenerationInput {
   post_title: string;
   post_body: string;
@@ -85,6 +87,7 @@ export interface ReplyGenerationInput {
   pain_points: string[];
   features: string[];
   matched_signals: string[];
+  tone_variant?: ToneVariant;
 }
 
 export interface GeneratedReply {
@@ -96,42 +99,52 @@ export interface GeneratedReply {
   confidence_score: number;
 }
 
+const TONE_DIRECTIVES: Record<ToneVariant, string> = {
+  standard:      'Balance helpfulness and a subtle product mention. Sound like a knowledgeable peer.',
+  less_salesy:   'Focus 90% on providing genuine value. Mention the product only once, very briefly, as an afterthought. No product description.',
+  more_helpful:  'Lead with deep insight and actionable advice. Mention the product only as the tool that helped you solve this exact problem.',
+  direct:        'Be slightly more explicit about what the product does, but still conversational. Mention the specific feature that applies to their problem.',
+};
+
 export async function generateReply(input: ReplyGenerationInput): Promise<GeneratedReply> {
-  const prompt = `You are an expert at writing authentic, helpful Reddit responses that subtly introduce a product.
+  const toneVariant = input.tone_variant || 'standard';
+  const toneDirective = TONE_DIRECTIVES[toneVariant];
+
+  const prompt = `You are an expert at writing authentic, helpful Reddit responses that naturally introduce a product.
+
+TONE: ${toneDirective}
 
 CONTEXT:
 - Product: ${input.product_name}
 - Target Customer: ${input.target_customer}
-- Key Pain Points We Solve: ${input.pain_points.join(', ')}
+- Pain Points We Solve: ${input.pain_points.slice(0, 3).join(', ')}
 - Key Features: ${input.features.slice(0, 3).join(', ')}
 - Why This Post Matched: ${input.matched_signals.join(', ')}
 
-POST TO REPLY TO:
+POST:
 Title: ${input.post_title}
 Subreddit: ${input.subreddit ? 'r/' + input.subreddit : 'N/A'}
 Body: ${(input.post_body || '').slice(0, 1000)}
 
-RULES FOR REPLY:
-1. Start with genuine empathy - acknowledge their pain or question
-2. Share useful insight or perspective (not just promotion)
-3. Introduce the product naturally and subtly, like a peer recommendation
-4. Sound like a real person, not a marketer
-5. Keep it under 200 words
-6. NO: "I work at", "Full disclosure", "Disclaimer"  - be natural
-7. NO aggressive CTAs or hard selling
-8. YES: Conversational, helpful, adds value
+STRICT RULES:
+1. Start with empathy — acknowledge their specific pain or question (1-2 sentences)
+2. Add genuine insight or perspective that helps them, independent of the product (2-3 sentences)
+3. Introduce the product naturally — like a peer sharing what worked for them (1-2 sentences)
+4. Max 200 words total
+5. NEVER say: "I work at", "full disclosure", "disclaimer", "check it out", "sign up"
+6. NO bullet points, NO headers, NO exclamation marks
+7. Sound like a thoughtful Reddit user, not a marketer
 
-Also write a short DM version (max 100 words) that's more direct.
+Also write a DM version (max 80 words) — slightly more direct but still human.
 
-Respond with ONLY this JSON structure:
+Return ONLY valid JSON:
 {
-  "reply_text": "the reddit comment reply",
-  "dm_text": "the direct message version",
+  "reply_text": "...",
+  "dm_text": "...",
   "spam_risk": "LOW",
   "natural_tone_score": 85,
   "promotion_level": "SUBTLE",
-  "confidence_score": 88,
-  "reasoning": "brief explanation of approach"
+  "confidence_score": 88
 }`;
 
   const message = await anthropic.messages.create({

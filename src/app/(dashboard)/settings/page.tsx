@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Settings,
   Globe,
   Bell,
   Key,
-  Palette,
+  CreditCard,
   Database,
   LogOut,
   RefreshCw,
   Sparkles,
-  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TopBar } from '@/components/layout/TopBar';
@@ -85,9 +87,27 @@ function Toggle({
   );
 }
 
+const PLANS = [
+  {
+    key: 'pro',
+    name: 'Pro',
+    price: '$49/mo',
+    features: ['250 leads/day', 'AI reply generation', 'Tone variants', 'Daily digest email', 'Priority support'],
+    highlight: true,
+  },
+  {
+    key: 'enterprise',
+    name: 'Enterprise',
+    price: 'Custom',
+    features: ['Unlimited leads', 'X/Twitter + LinkedIn', 'API access', 'Custom integrations', 'Dedicated support'],
+    highlight: false,
+  },
+] as const;
+
 export default function SettingsPage() {
   const router = useRouter();
-  const { activeProject, websiteProfile, setActiveProject, setWebsiteProfile, setLeads } = useAppStore();
+  const searchParams = useSearchParams();
+  const { activeProject, websiteProfile, workspaceId, plan, setPlan, setActiveProject, setWebsiteProfile, setLeads } = useAppStore();
 
   const [alerts, setAlerts] = useState({
     daily_digest: true,
@@ -95,6 +115,62 @@ export default function SettingsPage() {
     competitor_mention: false,
     email_notifications: false,
   });
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('upgraded') === '1') {
+      setUpgradeSuccess(true);
+      // Refresh plan from DB
+      if (workspaceId) {
+        fetch(`/api/workspace?id=${workspaceId}`)
+          .then((r) => r.json())
+          .then((d) => { if (d.plan) setPlan(d.plan); })
+          .catch(() => {});
+      }
+    }
+  }, [searchParams, workspaceId, setPlan]);
+
+  const handleUpgrade = async (planKey: string) => {
+    if (!workspaceId) return;
+    setCheckoutLoading(planKey);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planKey, workspace_id: workspaceId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    if (!workspaceId) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspaceId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Portal error:', err);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const toggleAlert = (key: keyof typeof alerts) => {
     setAlerts(prev => ({ ...prev, [key]: !prev[key] }));
@@ -111,11 +187,23 @@ export default function SettingsPage() {
     setLeads([]);
   };
 
+  const isOnPaidPlan = plan === 'pro' || plan === 'enterprise';
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <TopBar title="Settings" />
 
       <div className="p-6 max-w-2xl space-y-4">
+
+        {/* Upgrade success banner */}
+        {upgradeSuccess && (
+          <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-emerald-300">
+              Welcome to {plan.charAt(0).toUpperCase() + plan.slice(1)}! Your plan has been upgraded.
+            </p>
+          </div>
+        )}
 
         {/* Current Project */}
         {activeProject && (
@@ -217,6 +305,100 @@ export default function SettingsPage() {
           </SettingsSection>
         )}
 
+        {/* Billing / Plan */}
+        <SettingsSection title="Plan & Billing" description="Your current subscription" icon={CreditCard}>
+          {/* Current plan status */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-zinc-800/50">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium text-zinc-200 capitalize">{plan} Plan</p>
+                {plan === 'free' && (
+                  <Badge variant="outline">Free</Badge>
+                )}
+                {plan === 'pro' && (
+                  <Badge variant="success">Active</Badge>
+                )}
+                {plan === 'enterprise' && (
+                  <Badge variant="info">Enterprise</Badge>
+                )}
+              </div>
+              <p className="text-xs text-zinc-500">
+                {plan === 'free' && '25 leads/day · Basic AI replies'}
+                {plan === 'pro' && '250 leads/day · Full AI features · Daily digest'}
+                {plan === 'enterprise' && 'Unlimited · X/Twitter · API access'}
+              </p>
+            </div>
+            {isOnPaidPlan && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleManageBilling}
+                loading={portalLoading}
+                leftIcon={<ExternalLink className="h-3.5 w-3.5" />}
+                className="text-zinc-400"
+              >
+                Manage
+              </Button>
+            )}
+          </div>
+
+          {/* Plan cards */}
+          {!isOnPaidPlan && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PLANS.map(({ key, name, price, features, highlight }) => (
+                <div
+                  key={key}
+                  className={cn(
+                    'relative border rounded-xl p-4 transition-colors',
+                    highlight
+                      ? 'bg-violet-950/30 border-violet-500/40'
+                      : 'bg-zinc-800/30 border-zinc-700/50'
+                  )}
+                >
+                  {highlight && (
+                    <div className="absolute -top-2.5 left-4">
+                      <span className="bg-violet-600 text-white text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Zap className="h-2.5 w-2.5" /> Most Popular
+                      </span>
+                    </div>
+                  )}
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-zinc-100">{name}</p>
+                    <p className={cn('text-lg font-bold', highlight ? 'text-violet-400' : 'text-zinc-300')}>
+                      {price}
+                    </p>
+                  </div>
+                  <ul className="space-y-1.5 mb-4">
+                    {features.map((f) => (
+                      <li key={f} className="flex items-center gap-2 text-xs text-zinc-400">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-400 flex-shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant={highlight ? 'primary' : 'secondary'}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => key !== 'enterprise' ? handleUpgrade(key) : window.open('mailto:hello@signaldesk.ai', '_blank')}
+                    loading={checkoutLoading === key}
+                  >
+                    {key === 'enterprise' ? 'Contact Sales' : `Upgrade to ${name}`}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isOnPaidPlan && (
+            <div className="bg-zinc-800/30 rounded-lg p-3 border border-zinc-700/50">
+              <p className="text-xs text-zinc-500">
+                To change or cancel your subscription, use the billing portal above.
+              </p>
+            </div>
+          )}
+        </SettingsSection>
+
         {/* Alerts */}
         <SettingsSection title="Alerts & Notifications" description="Configure when to be notified" icon={Bell}>
           <Toggle
@@ -251,7 +433,9 @@ export default function SettingsPage() {
             {[
               { name: 'Anthropic (Claude)', status: 'configured', env: 'ANTHROPIC_API_KEY' },
               { name: 'Reddit API', status: 'using-public', env: 'Optional' },
-              { name: 'Supabase', status: 'configure', env: 'NEXT_PUBLIC_SUPABASE_URL' },
+              { name: 'Supabase', status: 'configured', env: 'NEXT_PUBLIC_SUPABASE_URL' },
+              { name: 'Stripe', status: 'configure', env: 'STRIPE_SECRET_KEY' },
+              { name: 'Resend (Email)', status: 'configure', env: 'RESEND_API_KEY' },
             ].map(({ name, status, env }) => (
               <div key={name} className="flex items-center justify-between py-2 border-b border-zinc-800/50 last:border-0">
                 <div>
@@ -271,7 +455,7 @@ export default function SettingsPage() {
           </p>
         </SettingsSection>
 
-        {/* Danger Zone */}
+        {/* Data Management */}
         <SettingsSection title="Data Management" description="Manage your lead data" icon={Database}>
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -282,35 +466,6 @@ export default function SettingsPage() {
             >
               Clear Lead Cache
             </Button>
-          </div>
-        </SettingsSection>
-
-        {/* Plan */}
-        <SettingsSection title="Plan" description="Your current subscription" icon={Palette}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-zinc-200">Free Plan</p>
-              <p className="text-xs text-zinc-500">30 leads/day · Reddit discovery</p>
-            </div>
-            <Button variant="primary" size="sm">
-              Upgrade
-            </Button>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {[
-              { name: 'Starter', price: '$29/mo', features: '100 leads/day' },
-              { name: 'Pro', price: '$79/mo', features: 'Unlimited leads' },
-              { name: 'Enterprise', price: 'Custom', features: 'X + LinkedIn' },
-            ].map(({ name, price, features }) => (
-              <div
-                key={name}
-                className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-2.5 text-center cursor-pointer hover:border-violet-500/50 transition-colors"
-              >
-                <p className="text-xs font-medium text-zinc-300">{name}</p>
-                <p className="text-sm font-bold text-violet-400">{price}</p>
-                <p className="text-[10px] text-zinc-500">{features}</p>
-              </div>
-            ))}
           </div>
         </SettingsSection>
 

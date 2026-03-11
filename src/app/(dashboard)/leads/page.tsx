@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ArrowRight,
   Activity,
+  CreditCard,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { LeadCard } from '@/components/dashboard/LeadCard';
@@ -116,6 +117,8 @@ export default function LeadsPage() {
   } = useAppStore();
 
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
 
   const hasProject = !!activeProject;
 
@@ -152,6 +155,12 @@ export default function LeadsPage() {
 
       const data = await res.json();
       if (data.success) {
+        if (data.limit_reached) {
+          setLimitReached(true);
+          setLimitMessage(data.message || 'Daily limit reached.');
+        } else {
+          setLimitReached(false);
+        }
         setLeads(data.leads);
       } else {
         setFetchError(data.error || 'Failed to fetch leads');
@@ -224,6 +233,25 @@ export default function LeadsPage() {
             <div className="mb-4">
               <LeadFilterBar />
             </div>
+
+            {/* Daily limit banner */}
+            {limitReached && (
+              <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 mb-4">
+                <CreditCard className="h-4 w-4 text-yellow-400 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm text-yellow-300 font-medium">Daily limit reached</p>
+                  <p className="text-xs text-yellow-400/70 mt-0.5">{limitMessage}</p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push('/settings')}
+                  className="text-xs flex-shrink-0"
+                >
+                  Upgrade
+                </Button>
+              </div>
+            )}
 
             {/* Error state */}
             {fetchError && (

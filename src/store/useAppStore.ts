@@ -11,7 +11,10 @@ import type {
 interface AppStore {
   // Auth state
   userId: string | null;
-  setUserId: (id: string | null) => void;
+  userEmail: string | null;
+  workspaceId: string | null;
+  setUser: (id: string | null, email: string | null) => void;
+  setWorkspaceId: (id: string | null) => void;
 
   // Active project
   activeProject: Project | null;
@@ -21,7 +24,7 @@ interface AppStore {
   websiteProfile: WebsiteProfile | null;
   setWebsiteProfile: (profile: WebsiteProfile | null) => void;
 
-  // Leads
+  // Leads (in-memory cache; source of truth is DB)
   leads: Lead[];
   setLeads: (leads: Lead[]) => void;
   updateLeadStatus: (leadId: string, status: Lead['status']) => void;
@@ -48,6 +51,13 @@ interface AppStore {
   // Notifications
   unreadCount: number;
   setUnreadCount: (count: number) => void;
+
+  // Plan
+  plan: 'free' | 'pro' | 'enterprise';
+  setPlan: (plan: 'free' | 'pro' | 'enterprise') => void;
+
+  // Full reset (on sign-out)
+  reset: () => void;
 }
 
 const defaultFilters: LeadFilters = {
@@ -68,23 +78,32 @@ const defaultOnboarding: OnboardingState = {
   error: null,
 };
 
+const defaultState = {
+  userId: null,
+  userEmail: null,
+  workspaceId: null,
+  activeProject: null,
+  websiteProfile: null,
+  leads: [],
+  totalLeads: 0,
+  filters: defaultFilters,
+  onboarding: defaultOnboarding,
+  isLoadingLeads: false,
+  isRefreshing: false,
+  unreadCount: 0,
+  plan: 'free' as const,
+};
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
-      // Auth
-      userId: null,
-      setUserId: (id) => set({ userId: id }),
+      ...defaultState,
 
-      // Active project
-      activeProject: null,
+      setUser: (id, email) => set({ userId: id, userEmail: email }),
+      setWorkspaceId: (id) => set({ workspaceId: id }),
       setActiveProject: (project) => set({ activeProject: project }),
-
-      // Website profile
-      websiteProfile: null,
       setWebsiteProfile: (profile) => set({ websiteProfile: profile }),
 
-      // Leads
-      leads: [],
       setLeads: (leads) => set({ leads }),
       updateLeadStatus: (leadId, status) =>
         set((state) => ({
@@ -92,39 +111,35 @@ export const useAppStore = create<AppStore>()(
             lead.id === leadId ? { ...lead, status } : lead
           ),
         })),
-      totalLeads: 0,
       setTotalLeads: (total) => set({ totalLeads: total }),
 
-      // Filters
-      filters: defaultFilters,
       setFilters: (filters) =>
         set((state) => ({ filters: { ...state.filters, ...filters } })),
       resetFilters: () => set({ filters: defaultFilters }),
 
-      // Onboarding
-      onboarding: defaultOnboarding,
       setOnboardingStep: (step) =>
         set((state) => ({ onboarding: { ...state.onboarding, step } })),
       setOnboardingData: (data) =>
         set((state) => ({ onboarding: { ...state.onboarding, ...data } })),
       resetOnboarding: () => set({ onboarding: defaultOnboarding }),
 
-      // Loading
-      isLoadingLeads: false,
       setIsLoadingLeads: (loading) => set({ isLoadingLeads: loading }),
-      isRefreshing: false,
       setIsRefreshing: (refreshing) => set({ isRefreshing: refreshing }),
-
-      // Notifications
-      unreadCount: 0,
       setUnreadCount: (count) => set({ unreadCount: count }),
+      setPlan: (plan) => set({ plan }),
+
+      reset: () => set(defaultState),
     }),
     {
-      name: 'signaldesk-storage',
+      name: 'signaldesk-v2',
       partialize: (state) => ({
+        userId: state.userId,
+        userEmail: state.userEmail,
+        workspaceId: state.workspaceId,
         activeProject: state.activeProject,
         websiteProfile: state.websiteProfile,
         filters: state.filters,
+        plan: state.plan,
       }),
     }
   )
