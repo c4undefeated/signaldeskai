@@ -22,6 +22,7 @@ import type { Lead, ReplySuggestion, WebsiteProfile } from '@/types';
 import { IntentScoreRing, ScoreBreakdown } from './IntentScore';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAppStore } from '@/store/useAppStore';
 
 interface LeadCardProps {
   lead: Lead;
@@ -36,13 +37,25 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
   const [reply, setReply] = useState<ReplySuggestion | null>(null);
   const [copiedReply, setCopiedReply] = useState(false);
   const [copiedDm, setCopiedDm] = useState(false);
+  const [activeTone, setActiveTone] = useState<'standard' | 'less_salesy' | 'more_helpful' | 'direct'>('standard');
+  const { workspaceId, activeProject } = useAppStore();
 
   const score = lead.score;
-  const intentScore = score?.intent_score ?? 0;
+  const intentScore = (score as any)?.final_score ?? score?.intent_score ?? 0;
 
-  const handleGenerateReply = async () => {
+  const handleStatus = async (newStatus: Lead['status']) => {
+    onStatusChange?.(lead.id, newStatus);
+    fetch('/api/leads/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_id: lead.id, status: newStatus, workspace_id: workspaceId }),
+    }).catch(console.error);
+  };
+
+  const handleGenerateReply = async (tone: typeof activeTone = activeTone) => {
     if (!websiteProfile) return;
     setIsGeneratingReply(true);
+    setActiveTone(tone);
 
     try {
       const res = await fetch('/api/reply', {
@@ -57,6 +70,9 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
           pain_points: websiteProfile.pain_points,
           features: websiteProfile.features,
           match_reasons: score?.match_reasons || [],
+          tone_variant: tone,
+          lead_id: lead.id,
+          project_id: activeProject?.id,
         }),
       });
 
@@ -85,7 +101,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
 
   const handleOpenPost = () => {
     window.open(lead.url, '_blank', 'noopener,noreferrer');
-    onStatusChange?.(lead.id, 'opened');
+    handleStatus('opened');
   };
 
   const isSaved = lead.status === 'saved';
@@ -199,6 +215,38 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
       {reply && isExpanded && (
         <div className="px-4 pb-3">
           <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-800 space-y-3">
+            {/* Tone variant buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {([
+                { key: 'standard',      label: 'Standard' },
+                { key: 'less_salesy',   label: 'Less Salesy' },
+                { key: 'more_helpful',  label: 'More Helpful' },
+                { key: 'direct',        label: 'Direct' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => handleGenerateReply(key)}
+                  disabled={isGeneratingReply}
+                  className={cn(
+                    'text-[10px] px-2 py-0.5 rounded-full border transition-all',
+                    activeTone === key
+                      ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                      : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="text-zinc-700 mx-1">·</span>
+              <button
+                onClick={() => handleGenerateReply(activeTone)}
+                disabled={isGeneratingReply}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+              >
+                ↺ Regenerate
+              </button>
+            </div>
+
             {/* Reply safety scores */}
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
@@ -214,13 +262,9 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
                 </span>
               </div>
               <span className="text-zinc-700">·</span>
-              <span className="text-xs text-zinc-500">
-                Tone: {reply.natural_tone_score}/100
-              </span>
+              <span className="text-xs text-zinc-500">Tone: {reply.natural_tone_score}/100</span>
               <span className="text-zinc-700">·</span>
-              <span className="text-xs text-zinc-500">
-                Promotion: {reply.promotion_level}
-              </span>
+              <span className="text-xs text-zinc-500">Promotion: {reply.promotion_level}</span>
             </div>
 
             {/* Comment Reply */}
@@ -296,7 +340,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onStatusChange?.(lead.id, isSaved ? 'new' : 'saved')}
+          onClick={() => handleStatus(isSaved ? 'new' : 'saved')}
           leftIcon={isSaved ? <BookmarkCheck className="h-3.5 w-3.5 text-violet-400" /> : <Bookmark className="h-3.5 w-3.5" />}
           className={cn('h-7 px-3 text-xs', isSaved && 'text-violet-400')}
         >
@@ -306,7 +350,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onStatusChange?.(lead.id, 'contacted')}
+          onClick={() => handleStatus('contacted')}
           leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
           className={cn('h-7 px-3 text-xs', lead.status === 'contacted' && 'text-emerald-400')}
         >
@@ -316,7 +360,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onStatusChange?.(lead.id, 'dismissed')}
+          onClick={() => handleStatus('dismissed')}
           leftIcon={<X className="h-3.5 w-3.5" />}
           className="h-7 px-3 text-xs text-zinc-600 hover:text-zinc-400 ml-auto"
         >

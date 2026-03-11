@@ -278,18 +278,18 @@ function QueriesPreview({ queries }: { queries: AnalysisResult['queries'] }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { setActiveProject, setWebsiteProfile, setOnboardingData } = useAppStore();
+  const { setActiveProject, setWebsiteProfile, userId, workspaceId, setWorkspaceId } = useAppStore();
 
   const [step, setStep] = useState<OnboardingStep>('url');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [projectName, setProjectName] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async () => {
     if (!websiteUrl.trim()) return;
-
     setIsAnalyzing(true);
     setStep('analyzing');
     setError(null);
@@ -300,16 +300,10 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: normalizeUrl(websiteUrl) }),
       });
-
       const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Analysis failed');
-      }
-
+      if (!res.ok || !data.success) throw new Error(data.error || 'Analysis failed');
       setResult(data);
-      const domain = extractDomain(websiteUrl);
-      setProjectName(data.analysis.product_name || domain);
+      setProjectName(data.analysis.product_name || extractDomain(websiteUrl));
       setStep('profile');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
@@ -319,49 +313,91 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleContinueToQueries = () => {
-    setStep('queries');
-  };
+  const handleContinueToQueries = () => { setStep('queries'); };
 
-  const handleLaunch = () => {
+  const handleLaunch = async () => {
     if (!result) return;
+    setIsLaunching(true);
+    setError(null);
 
-    // Create a project and website profile in the store
-    const projectId = `project_${Date.now()}`;
+    try {
+      let resolvedWorkspaceId = workspaceId;
 
-    const project = {
-      id: projectId,
-      user_id: 'local',
-      name: projectName,
-      website_url: normalizeUrl(websiteUrl),
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      // Ensure workspace exists (create if needed)
+      if (userId && !resolvedWorkspaceId) {
+        const wsRes = await fetch('/api/workspace', { method: 'POST' });
+        const wsData = await wsRes.json();
+        if (wsData.workspace?.id) {
+          resolvedWorkspaceId = wsData.workspace.id;
+          setWorkspaceId(wsData.workspace.id);
+        }
+      }
 
-    const profile: WebsiteProfile = {
-      id: `profile_${Date.now()}`,
-      project_id: projectId,
-      product_name: result.analysis.product_name,
-      category: result.analysis.category,
-      target_customer: result.analysis.target_customer,
-      pain_points: result.analysis.pain_points,
-      features: result.analysis.features,
-      keywords: result.analysis.keywords,
-      buyer_intent_phrases: result.analysis.buyer_intent_phrases,
-      competitors: result.analysis.competitors,
-      industry: result.analysis.industry,
-      pricing_signals: result.analysis.pricing_signals,
-      raw_analysis: result.analysis as Record<string, unknown>,
-      crawled_pages: [],
-      analyzed_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
+      // Create project in DB (or fall back to local)
+      let projectId = `local_${Date.now()}`;
+      if (userId && resolvedWorkspaceId) {
+        const projRes = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: projectName,
+            website_url: normalizeUrl(websiteUrl),
+            workspace_id: resolvedWorkspaceId,
+          }),
+        });
+        const projData = await projRes.json();
+        if (projData.project?.id) {
+          projectId = projData.project.id;
 
-    setActiveProject(project);
-    setWebsiteProfile(profile);
+          // Re-run analysis with real project_id to persist profile
+          await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: normalizeUrl(websiteUrl),
+              project_id: projectId,
+            }),
+          });
+        }
+      }
 
-    router.push('/leads');
+      const project = {
+        id: projectId,
+        user_id: userId || 'local',
+        name: projectName,
+        website_url: normalizeUrl(websiteUrl),
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const profile: WebsiteProfile = {
+        id: `profile_${projectId}`,
+        project_id: projectId,
+        product_name: result.analysis.product_name,
+        category: result.analysis.category,
+        target_customer: result.analysis.target_customer,
+        pain_points: result.analysis.pain_points,
+        features: result.analysis.features,
+        keywords: result.analysis.keywords,
+        buyer_intent_phrases: result.analysis.buyer_intent_phrases,
+        competitors: result.analysis.competitors,
+        industry: result.analysis.industry,
+        pricing_signals: result.analysis.pricing_signals,
+        raw_analysis: result.analysis as Record<string, unknown>,
+        crawled_pages: [],
+        analyzed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+
+      setActiveProject(project);
+      setWebsiteProfile(profile);
+      router.push('/leads');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Launch failed. Please try again.');
+    } finally {
+      setIsLaunching(false);
+    }
   };
 
   const totalSteps = 4;
@@ -513,10 +549,11 @@ export default function OnboardingPage() {
             <div className="mt-6">
               <Button
                 onClick={handleLaunch}
+                loading={isLaunching}
                 className="w-full h-11"
-                rightIcon={<ArrowRight className="h-4 w-4" />}
+                rightIcon={!isLaunching ? <ArrowRight className="h-4 w-4" /> : undefined}
               >
-                Launch Lead Discovery
+                {isLaunching ? 'Setting up project...' : 'Launch Lead Discovery'}
               </Button>
               <p className="text-xs text-zinc-600 text-center mt-2">
                 This will start scanning Reddit for matching conversations
