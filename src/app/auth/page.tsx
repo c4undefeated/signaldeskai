@@ -40,6 +40,13 @@ function AuthContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function formatAuthError(error: { message: string }) {
+    if (error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('fetch')) {
+      return 'Unable to connect to auth service. Check your Supabase environment variables.';
+    }
+    return error.message;
+  }
+
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -50,7 +57,7 @@ function AuthContent() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}` },
     });
     setIsLoading(false);
-    if (error) { setErrorMsg(error.message); return; }
+    if (error) { setErrorMsg(formatAuthError(error)); return; }
     setView('sent');
   };
 
@@ -66,12 +73,12 @@ function AuthContent() {
         options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}` },
       });
       setIsLoading(false);
-      if (error) { setErrorMsg(error.message); return; }
+      if (error) { setErrorMsg(formatAuthError(error)); return; }
       setView('sent');
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setIsLoading(false);
-      if (error) { setErrorMsg(error.message); return; }
+      if (error) { setErrorMsg(formatAuthError(error)); return; }
       router.replace(redirectTo);
     }
   };
@@ -82,7 +89,7 @@ function AuthContent() {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback?next=${redirectTo}` },
     });
-    if (error) { setErrorMsg(error.message); setIsGoogleLoading(false); }
+    if (error) { setErrorMsg(formatAuthError(error)); setIsGoogleLoading(false); }
   };
 
   const isSignUp = mode === 'signup';
