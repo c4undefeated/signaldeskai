@@ -50,6 +50,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (ws?.plan) {
         useAppStore.getState().setPlan(ws.plan as 'free' | 'pro' | 'enterprise');
       }
+      loadUnreadCount();
+    }
+  }
+
+  async function loadUnreadCount() {
+    try {
+      const res = await fetch('/api/notifications?limit=1');
+      if (!res.ok) return;
+      const data = await res.json();
+      useAppStore.getState().setUnreadCount(data.unread_count ?? 0);
+    } catch {
+      // non-critical — ignore
     }
   }
 
