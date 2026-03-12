@@ -171,22 +171,43 @@ Return ONLY valid JSON:
 }
 
 export async function crawlWebsite(url: string): Promise<string> {
-  // In production, use a proper crawler. For now, fetch the HTML.
+  // Primary: Jina AI reader — handles JS-rendered sites, Cloudflare, and bot protection.
+  // Free with no API key. Returns clean readable text.
+  try {
+    const jinaUrl = `https://r.jina.ai/${url}`;
+    const response = await fetch(jinaUrl, {
+      headers: {
+        'Accept': 'text/plain',
+        'X-Return-Format': 'text',
+        'X-Timeout': '15',
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (response.ok) {
+      const text = await response.text();
+      if (text && text.length > 200) {
+        return text.slice(0, 12000);
+      }
+    }
+  } catch {
+    // Fall through to direct fetch
+  }
+
+  // Fallback: direct HTML fetch + strip tags
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SignalDeskAI/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const html = await response.text();
-
-    // Extract text content from HTML
     const text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
