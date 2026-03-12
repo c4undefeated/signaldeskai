@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (data?.workspace_id) {
       setWorkspaceId(data.workspace_id);
-      const ws = data.workspaces as { plan: string } | null;
+      const ws = data.workspaces as unknown as { plan: string } | null;
       if (ws?.plan) {
         useAppStore.getState().setPlan(ws.plan as 'free' | 'pro' | 'enterprise');
       }

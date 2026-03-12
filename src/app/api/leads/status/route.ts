@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 // PATCH /api/leads/status — update lead status and log action
 export async function PATCH(req: NextRequest) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClientInstance, createServiceClient } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
+import { createServiceClient } from '@/lib/supabase';
 
 // POST /api/digest — generate and send daily digest for a workspace
 // Called by Vercel cron or Supabase pg_cron

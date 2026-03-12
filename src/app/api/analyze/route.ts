@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { analyzeWebsite, crawlWebsite } from '@/lib/ai';
 import { generateSearchQueries } from '@/lib/intent-scorer';
 import { normalizeUrl } from '@/lib/utils';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 export async function POST(req: NextRequest) {
   try {

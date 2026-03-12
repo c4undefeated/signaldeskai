@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Radio, Mail, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff, Lock } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
@@ -12,7 +12,7 @@ type AuthMethod = 'magic' | 'password';
 type AuthMode = 'signin' | 'signup';
 type View = 'form' | 'sent';
 
-export default function AuthPage() {
+function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/leads';
@@ -276,5 +276,13 @@ export default function AuthPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense>
+      <AuthContent />
+    </Suspense>
   );
 }

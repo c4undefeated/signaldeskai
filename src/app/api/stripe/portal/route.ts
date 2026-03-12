@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+}
 
 // POST /api/stripe/portal — create a Stripe customer portal session
 export async function POST(req: NextRequest) {
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No billing account found' }, { status: 400 });
     }
 
+    const stripe = getStripe();
     const session = await stripe.billingPortal.sessions.create({
       customer: workspace.stripe_customer_id,
       return_url: `${req.nextUrl.origin}/settings`,

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+}
 
-// Price IDs — set these in your env after creating products in Stripe dashboard
-const PRICE_IDS: Record<string, string> = {
-  pro: process.env.STRIPE_PRO_PRICE_ID || '',
-  enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID || '',
-};
+function getPriceIds(): Record<string, string> {
+  return {
+    pro: process.env.STRIPE_PRO_PRICE_ID || '',
+    enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID || '',
+  };
+}
 
 // POST /api/stripe/checkout — create a Stripe checkout session
 export async function POST(req: NextRequest) {
@@ -18,6 +21,8 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { plan, workspace_id } = await req.json();
+    const stripe = getStripe();
+    const PRICE_IDS = getPriceIds();
 
     if (!plan || !PRICE_IDS[plan]) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+function getStripe() {
+  return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+}
 
 // Map Stripe price IDs to plan names
 function getPlanFromPriceId(priceId: string): 'free' | 'pro' | 'enterprise' {
@@ -15,11 +16,13 @@ function getPlanFromPriceId(priceId: string): 'free' | 'pro' | 'enterprise' {
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature');
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!sig || !webhookSecret) {
     return NextResponse.json({ error: 'Missing signature or webhook secret' }, { status: 400 });
   }
 
+  const stripe = getStripe();
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
