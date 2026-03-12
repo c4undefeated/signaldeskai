@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Settings,
@@ -104,7 +104,7 @@ const PLANS = [
   },
 ] as const;
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { activeProject, websiteProfile, workspaceId, plan, setPlan, setActiveProject, setWebsiteProfile, setLeads } = useAppStore();
@@ -471,5 +471,13 @@ export default function SettingsPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   );
 }

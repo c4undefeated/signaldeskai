@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 // GET /api/projects — list projects for current workspace
 export async function GET(req: NextRequest) {

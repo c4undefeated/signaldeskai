@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 // GET /api/workspace?id=xxx — fetch workspace plan/details
 export async function GET(req: NextRequest) {

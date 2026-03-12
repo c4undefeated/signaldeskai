@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // GET /api/notifications — fetch notifications for the current user + their workspace

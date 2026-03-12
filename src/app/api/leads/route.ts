@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
 import { scorePost } from '@/lib/intent-scorer';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 // ── GET /api/leads — load persisted leads from DB ──────────────
 export async function GET(req: NextRequest) {
@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
         .eq('id', project_id)
         .single();
 
-      const plan = (proj?.workspaces as { plan: string } | null)?.plan || 'free';
+      const workspaces = proj?.workspaces as unknown as { plan: string } | null;
+      const plan = workspaces?.plan || 'free';
       const dailyLimit = plan === 'pro' ? 250 : plan === 'enterprise' ? 9999 : 25;
       const today = new Date().toISOString().split('T')[0];
 

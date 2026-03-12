@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateReply } from '@/lib/ai';
-import { createServerClientInstance } from '@/lib/supabase';
+import { createServerClientInstance } from '@/lib/supabase.server';
 
 type ToneVariant = 'standard' | 'less_salesy' | 'more_helpful' | 'direct';
 
@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
         .eq('id', project_id)
         .single();
 
-      const plan = (proj?.workspaces as { plan: string } | null)?.plan || 'free';
+      const workspaces = proj?.workspaces as unknown as { plan: string } | null;
+      const plan = workspaces?.plan || 'free';
       const dailyLimit = plan === 'pro' ? 50 : plan === 'enterprise' ? 999 : 5;
       const today = new Date().toISOString().split('T')[0];
 

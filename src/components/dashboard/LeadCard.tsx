@@ -328,7 +328,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
         <Button
           variant="secondary"
           size="sm"
-          onClick={handleGenerateReply}
+          onClick={() => handleGenerateReply()}
           loading={isGeneratingReply}
           leftIcon={<Sparkles className="h-3.5 w-3.5" />}
           className="h-7 px-3 text-xs"

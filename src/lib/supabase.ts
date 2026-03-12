@@ -1,7 +1,6 @@
-import { createServerClient } from '@supabase/ssr';
 import { createBrowserClient } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
 import type { NextRequest, NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -10,23 +9,6 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 // ── Browser client (client components) ──────────────────────
 export function createClient() {
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
-}
-
-// ── Server client (server components, route handlers) ────────
-export async function createServerClientInstance() {
-  const cookieStore = await cookies();
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() { return cookieStore.getAll(); },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        } catch {}
-      },
-    },
-  });
 }
 
 // ── Middleware client ─────────────────────────────────────────
