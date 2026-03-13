@@ -1,8 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
 
 export interface WebsiteAnalysis {
   product_name: string;
@@ -52,24 +50,9 @@ Focus on:
 - What are the most likely competitor products?
 - What pain phrases would a frustrated user of a competitor post?`;
 
-  const message = await anthropic.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 1500,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
-
-  const content = message.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from AI');
-  }
-
-  const rawText = content.text.trim();
-  // Extract JSON if wrapped in markdown code blocks
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const result = await model.generateContent(prompt);
+  const rawText = result.response.text().trim();
   const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]+?)\s*```/) || [null, rawText];
   const jsonText = jsonMatch[1] || rawText;
 
@@ -147,23 +130,9 @@ Return ONLY valid JSON:
   "confidence_score": 88
 }`;
 
-  const message = await anthropic.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 800,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
-
-  const content = message.content[0];
-  if (content.type !== 'text') {
-    throw new Error('Unexpected response type from AI');
-  }
-
-  const rawText = content.text.trim();
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const result = await model.generateContent(prompt);
+  const rawText = result.response.text().trim();
   const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]+?)\s*```/) || [null, rawText];
   const jsonText = jsonMatch[1] || rawText;
 
