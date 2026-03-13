@@ -50,7 +50,7 @@ Focus on:
 - What are the most likely competitor products?
 - What pain phrases would a frustrated user of a competitor post?`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite-preview-06-17' });
   const result = await model.generateContent(prompt);
   const rawText = result.response.text().trim();
   const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]+?)\s*```/) || [null, rawText];
@@ -130,7 +130,7 @@ Return ONLY valid JSON:
   "confidence_score": 88
 }`;
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite-preview-06-17' });
   const result = await model.generateContent(prompt);
   const rawText = result.response.text().trim();
   const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]+?)\s*```/) || [null, rawText];
