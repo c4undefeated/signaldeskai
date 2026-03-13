@@ -3,6 +3,10 @@
     {
       "path": "/api/digest",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/scan",
+      "schedule": "0 9 * * *"
     }
   ],
   "functions": {
@@ -14,6 +18,9 @@
     },
     "src/app/api/reply/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/scan/route.ts": {
+      "maxDuration": 300
     }
   }
 }
