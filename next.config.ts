@@ -3,7 +3,16 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   // Allow fetching from external domains for website analysis
   images: {
-    domains: ['*'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+      {
+        protocol: 'http',
+        hostname: '**',
+      },
+    ],
   },
   // Server-side fetch configuration
   experimental: {

@@ -6,7 +6,7 @@ const PROTECTED_ROUTES = ['/leads', '/saved', '/settings', '/notifications', '/o
 // Routes only for unauthenticated users
 const AUTH_ROUTES = ['/auth'];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
   const supabase = createMiddlewareClient(request, response);
 
