@@ -131,10 +131,11 @@ export async function POST(req: NextRequest) {
 
       if (proj?.workspace_id) {
         const today = new Date().toISOString().split('T')[0];
-        await supabase.from('usage_tracking').upsert(
-          { workspace_id: proj.workspace_id, period: today, replies_generated: 1 },
-          { onConflict: 'workspace_id,period', ignoreDuplicates: false }
-        );
+        await supabase.rpc('increment_usage', {
+          p_workspace_id: proj.workspace_id,
+          p_period: today,
+          p_replies: 1,
+        });
       }
     }
 

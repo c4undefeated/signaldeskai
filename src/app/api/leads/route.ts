@@ -174,13 +174,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Track usage
-      if (workspaceId) {
+      // Track usage (increment, don't overwrite)
+      if (workspaceId && scoredLeads.length > 0) {
         const today = new Date().toISOString().split('T')[0];
-        await supabase.from('usage_tracking').upsert(
-          { workspace_id: workspaceId, period: today, leads_discovered: scoredLeads.length },
-          { onConflict: 'workspace_id,period', ignoreDuplicates: false }
-        );
+        await supabase.rpc('increment_usage', {
+          p_workspace_id: workspaceId,
+          p_period: today,
+          p_leads: scoredLeads.length,
+        });
       }
     }
 
