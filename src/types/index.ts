@@ -2,7 +2,16 @@
 // SignalDesk AI - Core Type Definitions
 // ============================================================
 
-export type LeadStatus = 'new' | 'saved' | 'opened' | 'replied' | 'contacted' | 'dismissed';
+export type LeadStatus = 'new' | 'saved' | 'opened' | 'replied' | 'contacted' | 'closed' | 'dismissed';
+
+// ── CRM types ─────────────────────────────────────────────────────────────────
+
+export interface CRMHistoryEntry {
+  id: string;
+  action: string;
+  notes: string | null;
+  created_at: string;
+}
 export type LeadSource = 'reddit' | 'twitter' | 'hackernews';
 export type SpamRisk = 'LOW' | 'MEDIUM' | 'HIGH';
 export type PromotionLevel = 'NONE' | 'SUBTLE' | 'MODERATE' | 'HIGH';
