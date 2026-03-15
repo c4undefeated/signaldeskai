@@ -139,6 +139,83 @@ Return ONLY valid JSON:
   return JSON.parse(jsonText) as GeneratedReply;
 }
 
+// ─── AI Lead Reranking ────────────────────────────────────────────────────────
+
+export interface RerankResult {
+  post_index: number;
+  intent_confidence: number;
+  refined_reason: string;
+}
+
+export interface RerankContext {
+  product_name: string;
+  target_customer: string;
+  pain_points: string[];
+  features: string[];
+  keywords: string[];
+  competitors: string[];
+  buyer_intent_phrases: string[];
+}
+
+export async function rerankLeads(
+  candidates: Array<{ title: string; body: string | null; subreddit: string | null }>,
+  context: RerankContext
+): Promise<RerankResult[]> {
+  const postList = candidates
+    .map((p, i) => {
+      const body = (p.body || '').slice(0, 300).replace(/\n+/g, ' ');
+      return `[${i}] r/${p.subreddit || 'unknown'}\nTitle: ${p.title}\n${body ? `Body: ${body}` : '(no body)'}`;
+    })
+    .join('\n\n');
+
+  const prompt = `You are a B2B sales intelligence system. Evaluate Reddit posts for genuine buyer intent.
+
+PRODUCT CONTEXT:
+- Product: ${context.product_name}
+- Target Customer: ${context.target_customer}
+- Problems We Solve: ${context.pain_points.slice(0, 4).join('; ')}
+- Key Features: ${context.features.slice(0, 3).join('; ')}
+- Keywords: ${context.keywords.slice(0, 6).join(', ')}
+- Competitors: ${context.competitors.slice(0, 4).join(', ')}
+- Buyer Phrases: ${context.buyer_intent_phrases.slice(0, 4).join('; ')}
+
+REDDIT POSTS TO EVALUATE:
+${postList}
+
+TASK:
+Rerank these ${candidates.length} posts by genuine buyer intent for the product above.
+
+Scoring guide:
+- 70–100: actively seeking a solution, comparing tools, frustrated with a competitor, or has a clear buying signal
+- 40–69: relevant problem or pain but not in active buying mode
+- 0–39: general discussion, news, tutorial, or unrelated
+
+Set confidence to 0 for any post that is:
+- A news article, announcement, or general tech discussion
+- A tutorial, tip, or how-to with no buying signal
+- Completely unrelated to the product context
+
+Return ONLY a valid JSON array — no markdown, no explanation, no trailing text:
+[
+  { "post_index": 0, "intent_confidence": 85, "refined_reason": "Actively comparing CRM tools, mentioned switching from a competitor and tight deadline" },
+  { "post_index": 1, "intent_confidence": 42, "refined_reason": "Relevant pain point but seeking general advice, not evaluating tools" }
+]
+
+Include ALL ${candidates.length} posts. Order by intent_confidence descending.`;
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+  const result = await model.generateContent(prompt);
+  const rawText = result.response.text().trim();
+
+  // Extract the JSON array — be tolerant of extra prose around it
+  const jsonMatch = rawText.match(/\[[\s\S]+\]/);
+  if (!jsonMatch) throw new Error('No JSON array in Gemini rerank response');
+
+  return JSON.parse(jsonMatch[0]) as RerankResult[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function crawlWebsite(url: string): Promise<string> {
   // Primary: Jina AI reader — handles JS-rendered sites, Cloudflare, and bot protection.
   // Free with no API key. Returns clean readable text.
