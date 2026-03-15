@@ -16,10 +16,12 @@ import {
   ArrowUp,
   MessageCircle,
   Sparkles,
+  StickyNote,
 } from 'lucide-react';
 import { cn, formatRelativeTime, getStatusColor, truncateText } from '@/lib/utils';
 import type { Lead, ReplySuggestion, WebsiteProfile } from '@/types';
 import { IntentScoreRing, ScoreBreakdown } from './IntentScore';
+import { LeadCRMPanel } from './LeadCRMPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
@@ -33,6 +35,7 @@ interface LeadCardProps {
 
 export function LeadCard({ lead, websiteProfile, onStatusChange, className }: LeadCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showCRM, setShowCRM] = useState(false);
   const [isGeneratingReply, setIsGeneratingReply] = useState(false);
   const [reply, setReply] = useState<ReplySuggestion | null>(null);
   const [copiedReply, setCopiedReply] = useState(false);
@@ -367,6 +370,20 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
           Dismiss
         </Button>
 
+        {/* CRM toggle */}
+        <button
+          onClick={() => setShowCRM(!showCRM)}
+          title="Notes & pipeline"
+          className={cn(
+            'flex items-center gap-1 text-xs transition-colors h-7 px-2 rounded',
+            showCRM
+              ? 'text-violet-400 bg-violet-500/10'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60'
+          )}
+        >
+          <StickyNote className="h-3.5 w-3.5" />
+        </button>
+
         {/* Expand/Collapse */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -376,6 +393,15 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
           {isExpanded ? 'Less' : 'More'}
         </button>
       </div>
+
+      {/* CRM Panel */}
+      {showCRM && (
+        <LeadCRMPanel
+          leadId={lead.id}
+          currentStatus={lead.status}
+          onStatusChange={handleStatus}
+        />
+      )}
     </article>
   );
 }

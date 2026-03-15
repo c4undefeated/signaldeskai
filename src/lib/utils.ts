@@ -74,6 +74,7 @@ export function getStatusColor(status: string): string {
     case 'opened': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
     case 'replied': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'contacted': return 'bg-teal-500/10 text-teal-400 border-teal-500/20';
+    case 'closed':    return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'dismissed': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
     default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
   }
