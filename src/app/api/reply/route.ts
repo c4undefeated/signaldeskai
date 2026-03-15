@@ -1,19 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateReply } from '@/lib/ai';
+import type { ToneVariant } from '@/lib/ai';
 import { createServerClientInstance } from '@/lib/supabase.server';
 
-type ToneVariant = 'standard' | 'less_salesy' | 'more_helpful' | 'direct';
+// ── Safety validator ──────────────────────────────────────────────────────────
 
-// Safety post-processor
+// Patterns that indicate hard promotional CTAs
+const HARD_CTA_RE = /\b(click here|sign up\s*(now|today|free)?|try it free|get started\s*(today|now|free)?|join now|buy now|subscribe now|limited time|act now|don't miss out|claim (your|my) (free|deal|spot)|register now)\b/i;
+
+// Affiliate / sponsored content signals
+const AFFILIATE_RE = /\b(affiliate|sponsored|paid promotion|use (my |my affiliate )?code|use (this |my )?link|referral (link|code)|link in( my)? bio|exclusive deal|discount code|promo code|save \d+%|get \d+% off|best deal|partnered? with)\b/i;
+
+// Superlative promotional adjectives — 3+ in one reply = over-promotion
+const PROMO_SUPERLATIVES_RE = /\b(amazing|incredible|revolutionary|game.?changer|must.?have|must.?try|life.?changing|industry.?leading|state.?of.?the.?art|best.?in.?class|unbelievable|unmatched|unrivalled|powerful|perfect solution)\b/gi;
+
+// Self-identification as the product creator
+const SELF_ID_RE = /\b(i work at|i'm (from|at|on the team)|full disclosure|disclaimer|i (built|created|made|founded)|we built|our (product|tool|app|platform))\b/i;
+
 function validateReply(text: string): { valid: boolean; flags: string[] } {
   const flags: string[] = [];
-  if (/i work at|full disclosure|disclaimer/i.test(text))             flags.push('SELF_IDENTIFYING');
-  if (/click here|sign up now|try it free|get started today/i.test(text)) flags.push('HARD_CTA');
-  if (text.split(/[.!?]/).length > 10)                                flags.push('TOO_LONG');
-  const promotionWords = (text.match(/\b(product|solution|tool|platform|software|app)\b/gi) || []).length;
-  if (promotionWords > 4)                                             flags.push('OVER_PROMOTING');
+
+  if (SELF_ID_RE.test(text))
+    flags.push('SELF_IDENTIFYING');
+
+  if (HARD_CTA_RE.test(text))
+    flags.push('HARD_CTA');
+
+  if (AFFILIATE_RE.test(text))
+    flags.push('AFFILIATE_WORDING');
+
+  const superlativeCount = (text.match(PROMO_SUPERLATIVES_RE) || []).length;
+  if (superlativeCount >= 3)
+    flags.push('OVER_PROMOTING');
+
+  // Sentence count guard — more than 10 sentences is almost certainly too long
+  if (text.split(/[.!?]+/).filter(s => s.trim().length > 0).length > 10)
+    flags.push('TOO_LONG');
+
   return { valid: flags.length === 0, flags };
 }
+
+// Escalating fallback tones — each retry uses a safer mode
+const RETRY_TONE_ESCALATION: ToneVariant[] = ['less_salesy', 'no_product_mention'];
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +55,19 @@ export async function POST(req: NextRequest) {
       pain_points = [], features = [], match_reasons = [],
       tone_variant = 'standard' as ToneVariant,
       lead_id, project_id,
-    } = body;
+    } = body as {
+      post_title: string;
+      post_body?: string;
+      subreddit?: string;
+      product_name: string;
+      target_customer?: string;
+      pain_points?: string[];
+      features?: string[];
+      match_reasons?: string[];
+      tone_variant?: ToneVariant;
+      lead_id?: string;
+      project_id?: string;
+    };
 
     if (!post_title || !product_name) {
       return NextResponse.json({ error: 'post_title and product_name are required' }, { status: 400 });
@@ -62,11 +102,20 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Generate with retry on safety failure ────────────────
+    // Each failed attempt escalates to a safer tone:
+    //   attempt 1 → requested tone
+    //   attempt 2 → less_salesy
+    //   attempt 3 → no_product_mention (last resort)
     let reply: Awaited<ReturnType<typeof generateReply>> | null = null;
     let attempts = 0;
     const maxAttempts = 3;
 
     while (attempts < maxAttempts) {
+      const activeTone: ToneVariant =
+        attempts === 0
+          ? tone_variant
+          : RETRY_TONE_ESCALATION[Math.min(attempts - 1, RETRY_TONE_ESCALATION.length - 1)];
+
       attempts++;
       const generated = await generateReply({
         post_title,
@@ -77,21 +126,23 @@ export async function POST(req: NextRequest) {
         pain_points,
         features,
         matched_signals: match_reasons,
-        tone_variant,
+        tone_variant: activeTone,
       });
 
       const { valid, flags } = validateReply(generated.reply_text);
 
       if (valid || attempts === maxAttempts) {
-        // On last attempt accept whatever we have
         reply = {
           ...generated,
-          // Downgrade risk if flags found on last attempt
-          spam_risk: flags.includes('HARD_CTA') ? 'HIGH' : flags.includes('OVER_PROMOTING') ? 'MEDIUM' : generated.spam_risk,
+          // Surface accurate risk level based on what the validator caught
+          spam_risk:
+            flags.includes('HARD_CTA') || flags.includes('AFFILIATE_WORDING') ? 'HIGH'
+            : flags.includes('OVER_PROMOTING') ? 'MEDIUM'
+            : generated.spam_risk,
         };
         break;
       }
-      // Else retry with stricter tone
+      // Safety check failed — retry with escalated tone
     }
 
     if (!reply) {
@@ -118,8 +169,8 @@ export async function POST(req: NextRequest) {
         natural_tone_score: reply.natural_tone_score,
         promotion_level: reply.promotion_level,
         confidence_score: reply.confidence_score,
-        model_used: 'claude-opus-4-6',
-        prompt_version: 'v2',
+        model_used: 'gemini-2.5-flash-lite',
+        prompt_version: 'v3',
       });
 
       // Track usage
