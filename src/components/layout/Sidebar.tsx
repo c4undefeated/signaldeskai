@@ -34,7 +34,7 @@ const navItems = [
     label: 'Signals',
     href: '/signals',
     icon: TrendingUp,
-    badge: 'Soon',
+    badge: null,
   },
 ];
 
