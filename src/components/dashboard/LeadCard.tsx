@@ -22,6 +22,7 @@ import { cn, formatRelativeTime, getStatusColor, truncateText } from '@/lib/util
 import type { Lead, ReplySuggestion, WebsiteProfile } from '@/types';
 import { IntentScoreRing, ScoreBreakdown } from './IntentScore';
 import { LeadCRMPanel } from './LeadCRMPanel';
+import { OpportunityBadges } from './OpportunityBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
@@ -40,6 +41,7 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
   const [reply, setReply] = useState<ReplySuggestion | null>(null);
   const [copiedReply, setCopiedReply] = useState(false);
   const [copiedDm, setCopiedDm] = useState(false);
+  const [replyTracked, setReplyTracked] = useState(false);
   const [activeTone, setActiveTone] = useState<'standard' | 'less_salesy' | 'more_helpful' | 'direct'>('standard');
   const { workspaceId, activeProject } = useAppStore();
 
@@ -100,6 +102,11 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
       setCopiedDm(true);
       setTimeout(() => setCopiedDm(false), 2000);
     }
+  };
+
+  const markAsReplied = () => {
+    handleStatus('replied');
+    setReplyTracked(true);
   };
 
   const handleOpenPost = () => {
@@ -163,6 +170,9 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
                 {truncateText(lead.body, 140)}
               </p>
             )}
+
+            {/* Opportunity indicators */}
+            <OpportunityBadges lead={lead} />
 
             {/* Engagement stats */}
             <div className="flex items-center gap-3 mt-2">
@@ -290,6 +300,24 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
               <p className="text-xs text-zinc-300 leading-relaxed bg-zinc-900 rounded-lg p-2.5 ai-text border border-zinc-800">
                 {reply.reply_text}
               </p>
+
+              {/* Reply success tracking */}
+              <div className="flex items-center gap-2 mt-2">
+                {replyTracked ? (
+                  <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Tracked as replied
+                  </span>
+                ) : (
+                  <button
+                    onClick={markAsReplied}
+                    className="text-[10px] text-zinc-500 hover:text-teal-400 transition-colors flex items-center gap-1"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    Sent it? Mark as replied
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* DM Version */}
