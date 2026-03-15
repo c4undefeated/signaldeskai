@@ -12,12 +12,13 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import { createClient } from '@/lib/supabase';
 import { LeadCard } from '@/components/dashboard/LeadCard';
 import { LeadFilterBar } from '@/components/dashboard/LeadFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { Lead } from '@/types';
+import type { Lead, WebsiteProfile } from '@/types';
 
 function LeadCardSkeleton() {
   return (
@@ -114,13 +115,73 @@ export default function LeadsPage() {
     isRefreshing,
     setIsRefreshing,
     updateLeadStatus,
+    workspaceId,
+    setWorkspaceId,
+    setUser,
+    setActiveProject,
+    setWebsiteProfile,
+    setPlan,
   } = useAppStore();
 
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const hasProject = !!activeProject;
+
+  // Restore project from DB when localStorage state is missing (e.g. new device, cleared storage)
+  useEffect(() => {
+    if (activeProject) return; // already loaded from localStorage
+
+    const restore = async () => {
+      setIsRestoring(true);
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        setUser(user.id, user.email ?? null);
+
+        // Get or create workspace
+        let resolvedWorkspaceId = workspaceId;
+        if (!resolvedWorkspaceId) {
+          const wsRes = await fetch('/api/workspace', { method: 'POST' });
+          const wsData = await wsRes.json();
+          if (wsData.workspace?.id) {
+            resolvedWorkspaceId = wsData.workspace.id;
+            setWorkspaceId(wsData.workspace.id);
+            if (wsData.workspace.plan) setPlan(wsData.workspace.plan);
+          }
+        }
+
+        if (!resolvedWorkspaceId) return;
+
+        // Fetch most recent active project
+        const projRes = await fetch(`/api/projects?workspace_id=${resolvedWorkspaceId}`);
+        const projData = await projRes.json();
+        const projects = projData.projects ?? [];
+        if (projects.length === 0) return;
+
+        const project = projects[0];
+        setActiveProject(project);
+
+        // Use the joined website_profiles if available
+        const profiles = project.website_profiles;
+        const profile: WebsiteProfile | null = Array.isArray(profiles) && profiles.length > 0
+          ? profiles[0]
+          : null;
+        if (profile) setWebsiteProfile(profile);
+      } catch {
+        // Silently fail — user will see the "Set up project" empty state
+      } finally {
+        setIsRestoring(false);
+      }
+    };
+
+    restore();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (!activeProject || !websiteProfile) return;
@@ -207,8 +268,16 @@ export default function LeadsPage() {
       />
 
       <div className="p-6">
+        {/* Restoring session from DB */}
+        {!hasProject && isRestoring && (
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm text-zinc-500">Loading your project...</p>
+          </div>
+        )}
+
         {/* Project not set up */}
-        {!hasProject && (
+        {!hasProject && !isRestoring && (
           <EmptyState hasProject={false} />
         )}
 
