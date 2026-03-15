@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Bookmark,
@@ -10,12 +11,112 @@ import {
   TrendingUp,
   Plus,
   Radio,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { UserMenu } from '@/components/layout/UserMenu';
 import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
+
+// ── UsageMeter ────────────────────────────────────────────────────────────────
+
+interface UsageData {
+  plan: string;
+  leads_discovered: number;
+  leads_limit: number;
+  replies_generated: number;
+  replies_limit: number;
+}
+
+function UsageMeter() {
+  const router = useRouter();
+  const { workspaceId } = useAppStore();
+  const [usage, setUsage] = useState<UsageData | null>(null);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    fetch('/api/usage')
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setUsage(d); })
+      .catch(() => {});
+  }, [workspaceId]);
+
+  if (!usage) return null;
+
+  const leadPct  = Math.round((usage.leads_discovered  / usage.leads_limit)  * 100);
+  const replyPct = Math.round((usage.replies_generated / usage.replies_limit) * 100);
+  const isNearLimit = leadPct >= 80 || replyPct >= 80;
+  const isAtLimit   = leadPct >= 100 || replyPct >= 100;
+  const isFree = usage.plan === 'free';
+
+  const barColor = isAtLimit ? 'red' : isNearLimit ? 'yellow' : 'violet';
+
+  return (
+    <div className="px-3 pb-2">
+      <div
+        className={cn(
+          'rounded-lg border p-3 space-y-2 transition-colors',
+          isAtLimit   ? 'bg-red-500/5 border-red-500/20'
+          : isNearLimit ? 'bg-yellow-500/5 border-yellow-500/20'
+          : 'bg-zinc-900/50 border-zinc-800'
+        )}
+      >
+        {/* Leads */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-zinc-500">Leads today</span>
+            <span
+              className={cn(
+                'text-[10px] tabular-nums font-medium',
+                isAtLimit ? 'text-red-400' : isNearLimit ? 'text-yellow-400' : 'text-zinc-400'
+              )}
+            >
+              {usage.leads_discovered}/{usage.leads_limit}
+            </span>
+          </div>
+          <Progress value={usage.leads_discovered} max={usage.leads_limit} color={barColor} size="sm" />
+        </div>
+
+        {/* Replies */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-zinc-500">AI replies</span>
+            <span
+              className={cn(
+                'text-[10px] tabular-nums font-medium',
+                replyPct >= 100 ? 'text-red-400' : replyPct >= 80 ? 'text-yellow-400' : 'text-zinc-400'
+              )}
+            >
+              {usage.replies_generated}/{usage.replies_limit}
+            </span>
+          </div>
+          <Progress value={usage.replies_generated} max={usage.replies_limit} color={replyPct >= 80 ? barColor : 'violet'} size="sm" />
+        </div>
+
+        {/* Upgrade CTA */}
+        {isFree && (
+          <button
+            onClick={() => router.push('/settings')}
+            className={cn(
+              'w-full flex items-center justify-center gap-1 text-[10px] font-medium py-1 rounded',
+              'transition-all duration-150',
+              isAtLimit
+                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                : isNearLimit
+                ? 'bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25'
+                : 'text-violet-400 hover:text-violet-300'
+            )}
+          >
+            <Zap className="h-2.5 w-2.5" />
+            {isAtLimit ? 'Limit reached · Upgrade' : isNearLimit ? 'Almost full · Upgrade' : 'Upgrade to Pro'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const navItems = [
   {
@@ -128,6 +229,9 @@ export function Sidebar() {
           <p className="text-[10px] text-zinc-500">Scanning Reddit for signals</p>
         </div>
       </nav>
+
+      {/* Usage meter */}
+      <UsageMeter />
 
       {/* Bottom Nav */}
       <div className="px-3 pb-4 pt-2 border-t border-zinc-800/50 space-y-0.5">

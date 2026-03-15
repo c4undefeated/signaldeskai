@@ -15,13 +15,24 @@ import {
   CheckCircle2,
   ExternalLink,
   Zap,
+  BarChart3,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { cn, extractDomain } from '@/lib/utils';
+
+interface UsageData {
+  plan: string;
+  leads_discovered: number;
+  leads_limit: number;
+  replies_generated: number;
+  replies_limit: number;
+  period: string;
+}
 
 function SettingsSection({
   title,
@@ -118,6 +129,14 @@ function SettingsContent() {
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
+  const [usage, setUsage] = useState<UsageData | null>(null);
+
+  useEffect(() => {
+    fetch('/api/usage')
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setUsage(d); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (searchParams.get('upgraded') === '1') {
@@ -341,6 +360,91 @@ function SettingsContent() {
               </Button>
             )}
           </div>
+
+          {/* Today's usage */}
+          {usage && (
+            <div className="mb-4 pb-4 border-b border-zinc-800/50">
+              <div className="flex items-center gap-2 mb-3">
+                <BarChart3 className="h-3.5 w-3.5 text-zinc-400" />
+                <p className="text-xs font-medium text-zinc-400">Usage today</p>
+                <span className="text-[10px] text-zinc-600 ml-auto">Resets at midnight UTC</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  {
+                    label: 'Leads discovered',
+                    used: usage.leads_discovered,
+                    limit: usage.leads_limit,
+                  },
+                  {
+                    label: 'AI replies',
+                    used: usage.replies_generated,
+                    limit: usage.replies_limit,
+                  },
+                ].map(({ label, used, limit }) => {
+                  const pct = Math.round((used / limit) * 100);
+                  const color = pct >= 100 ? 'red' : pct >= 80 ? 'yellow' : 'violet';
+                  return (
+                    <div key={label}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs text-zinc-500">{label}</span>
+                        <span
+                          className={cn(
+                            'text-xs tabular-nums font-medium',
+                            pct >= 100 ? 'text-red-400' : pct >= 80 ? 'text-yellow-400' : 'text-zinc-400'
+                          )}
+                        >
+                          {used} / {limit}
+                        </span>
+                      </div>
+                      <Progress value={used} max={limit} color={color} size="md" />
+                      {pct >= 80 && pct < 100 && (
+                        <p className="text-[10px] text-yellow-400 mt-1">{100 - pct}% remaining</p>
+                      )}
+                      {pct >= 100 && (
+                        <p className="text-[10px] text-red-400 mt-1">Daily limit reached</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Upgrade nudge when near/at limit on free plan */}
+              {!isOnPaidPlan && (usage.leads_discovered / usage.leads_limit >= 0.8 || usage.replies_generated / usage.replies_limit >= 0.8) && (
+                <div className={cn(
+                  'mt-3 flex items-center gap-3 rounded-lg border px-3 py-2.5',
+                  usage.leads_discovered >= usage.leads_limit || usage.replies_generated >= usage.replies_limit
+                    ? 'bg-red-500/8 border-red-500/20'
+                    : 'bg-yellow-500/8 border-yellow-500/20'
+                )}>
+                  <Zap className={cn(
+                    'h-4 w-4 flex-shrink-0',
+                    usage.leads_discovered >= usage.leads_limit ? 'text-red-400' : 'text-yellow-400'
+                  )} />
+                  <div className="flex-1">
+                    <p className={cn(
+                      'text-xs font-medium',
+                      usage.leads_discovered >= usage.leads_limit ? 'text-red-300' : 'text-yellow-300'
+                    )}>
+                      {usage.leads_discovered >= usage.leads_limit ? "You've hit today's limit" : "You're close to your limit"}
+                    </p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      Upgrade to Pro for 10× more leads and replies per day.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="text-xs flex-shrink-0"
+                    onClick={() => handleUpgrade('pro')}
+                    loading={checkoutLoading === 'pro'}
+                  >
+                    Upgrade
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Plan cards */}
           {!isOnPaidPlan && (
