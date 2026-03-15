@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Zap,
   LayoutDashboard,
   Bookmark,
   Settings,
@@ -16,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { Badge } from '@/components/ui/badge';
+import { UserMenu } from '@/components/layout/UserMenu';
 
 const navItems = [
   {
@@ -172,18 +172,7 @@ export function Sidebar() {
           );
         })}
 
-        {/* User Profile */}
-        <div className="mt-2 pt-2 border-t border-zinc-800/50">
-          <div className="flex items-center gap-2.5 px-2.5 py-1.5">
-            <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex-shrink-0 flex items-center justify-center">
-              <Zap className="h-3.5 w-3.5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-zinc-300 truncate">Workspace</p>
-              <p className="text-[10px] text-zinc-500">Free Plan</p>
-            </div>
-          </div>
-        </div>
+        <UserMenu />
       </div>
     </aside>
   );
