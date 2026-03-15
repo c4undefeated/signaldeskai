@@ -3,6 +3,7 @@ import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
 import { scorePost } from '@/lib/intent-scorer';
 import { rerankLeads } from '@/lib/ai';
 import { diversifyLeads } from '@/lib/diversity';
+import { buildBehaviorProfile, applyBehaviorBoost } from '@/lib/behavioral-scorer';
 import { createServerClientInstance } from '@/lib/supabase.server';
 
 interface ProfileRow {
@@ -224,7 +225,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Stage 3: Diversity enforcement ────────────────────────
+    // ── Stage 3: Behavioral scoring ───────────────────────────
+    if (workspaceId) {
+      const behaviorProfile = await buildBehaviorProfile(workspaceId, supabase);
+      finalLeads = finalLeads
+        .map((lead) => applyBehaviorBoost(lead, behaviorProfile))
+        .sort((a, b) => b.score.final_score - a.score.final_score);
+    }
+
+    // ── Stage 4: Diversity enforcement ────────────────────────
     finalLeads = diversifyLeads(finalLeads, Math.min(FINAL_COUNT, limit));
 
     // ── Persist to Supabase ────────────────────────────────────
