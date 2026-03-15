@@ -12,13 +12,12 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { createClient } from '@/lib/supabase';
 import { LeadCard } from '@/components/dashboard/LeadCard';
 import { LeadFilterBar } from '@/components/dashboard/LeadFilters';
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { Lead, WebsiteProfile } from '@/types';
+import type { Lead } from '@/types';
 
 function LeadCardSkeleton() {
   return (
@@ -115,73 +114,13 @@ export default function LeadsPage() {
     isRefreshing,
     setIsRefreshing,
     updateLeadStatus,
-    workspaceId,
-    setWorkspaceId,
-    setUser,
-    setActiveProject,
-    setWebsiteProfile,
-    setPlan,
   } = useAppStore();
 
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
   const [limitMessage, setLimitMessage] = useState<string | null>(null);
-  const [isRestoring, setIsRestoring] = useState(false);
 
   const hasProject = !!activeProject;
-
-  // Restore project from DB when localStorage state is missing (e.g. new device, cleared storage)
-  useEffect(() => {
-    if (activeProject) return; // already loaded from localStorage
-
-    const restore = async () => {
-      setIsRestoring(true);
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        setUser(user.id, user.email ?? null);
-
-        // Get or create workspace
-        let resolvedWorkspaceId = workspaceId;
-        if (!resolvedWorkspaceId) {
-          const wsRes = await fetch('/api/workspace', { method: 'POST' });
-          const wsData = await wsRes.json();
-          if (wsData.workspace?.id) {
-            resolvedWorkspaceId = wsData.workspace.id;
-            setWorkspaceId(wsData.workspace.id);
-            if (wsData.workspace.plan) setPlan(wsData.workspace.plan);
-          }
-        }
-
-        if (!resolvedWorkspaceId) return;
-
-        // Fetch most recent active project
-        const projRes = await fetch(`/api/projects?workspace_id=${resolvedWorkspaceId}`);
-        const projData = await projRes.json();
-        const projects = projData.projects ?? [];
-        if (projects.length === 0) return;
-
-        const project = projects[0];
-        setActiveProject(project);
-
-        // Use the joined website_profiles if available
-        const profiles = project.website_profiles;
-        const profile: WebsiteProfile | null = Array.isArray(profiles) && profiles.length > 0
-          ? profiles[0]
-          : null;
-        if (profile) setWebsiteProfile(profile);
-      } catch {
-        // Silently fail — user will see the "Set up project" empty state
-      } finally {
-        setIsRestoring(false);
-      }
-    };
-
-    restore();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (!activeProject || !websiteProfile) return;
@@ -191,7 +130,6 @@ export default function LeadsPage() {
     setFetchError(null);
 
     try {
-      // Generate queries from the website profile
       const { generateSearchQueries } = await import('@/lib/intent-scorer');
       const queries = generateSearchQueries(
         websiteProfile.keywords || [],
@@ -240,7 +178,6 @@ export default function LeadsPage() {
     }
   }, [hasProject, websiteProfile, leads.length, fetchLeads]);
 
-  // Filter leads based on current filters
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
       if (lead.status === 'dismissed') return false;
@@ -268,16 +205,8 @@ export default function LeadsPage() {
       />
 
       <div className="p-6">
-        {/* Restoring session from DB */}
-        {!hasProject && isRestoring && (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm text-zinc-500">Loading your project...</p>
-          </div>
-        )}
-
-        {/* Project not set up */}
-        {!hasProject && !isRestoring && (
+        {/* No project — bootstrap redirects to /onboarding, this is a fallback */}
+        {!hasProject && (
           <EmptyState hasProject={false} />
         )}
 
@@ -295,15 +224,12 @@ export default function LeadsPage() {
         {/* Main content */}
         {hasProject && websiteProfile && (
           <>
-            {/* Stats */}
             {leads.length > 0 && <StatsBar leads={filteredLeads} />}
 
-            {/* Filters */}
             <div className="mb-4">
               <LeadFilterBar />
             </div>
 
-            {/* Daily limit banner */}
             {limitReached && (
               <div className="flex items-center gap-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 mb-4">
                 <CreditCard className="h-4 w-4 text-yellow-400 flex-shrink-0" />
@@ -322,7 +248,6 @@ export default function LeadsPage() {
               </div>
             )}
 
-            {/* Error state */}
             {fetchError && (
               <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4">
                 <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
@@ -338,7 +263,6 @@ export default function LeadsPage() {
               </div>
             )}
 
-            {/* Loading skeletons */}
             {isLoadingLeads && (
               <div className="space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -347,7 +271,6 @@ export default function LeadsPage() {
               </div>
             )}
 
-            {/* Lead cards */}
             {!isLoadingLeads && filteredLeads.length > 0 && (
               <div className="space-y-3">
                 {filteredLeads.map((lead) => (
@@ -361,7 +284,6 @@ export default function LeadsPage() {
               </div>
             )}
 
-            {/* Empty filtered state */}
             {!isLoadingLeads && filteredLeads.length === 0 && leads.length > 0 && (
               <div className="text-center py-16">
                 <p className="text-sm text-zinc-500 mb-3">No leads match your current filters</p>
@@ -371,7 +293,6 @@ export default function LeadsPage() {
               </div>
             )}
 
-            {/* Empty state - no leads */}
             {!isLoadingLeads && !fetchError && leads.length === 0 && (
               <EmptyState hasProject={true} />
             )}

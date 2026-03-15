@@ -56,6 +56,10 @@ interface AppStore {
   plan: 'free' | 'pro' | 'enterprise';
   setPlan: (plan: 'free' | 'pro' | 'enterprise') => void;
 
+  // Bootstrap initialization flag (never persisted)
+  isInitialized: boolean;
+  setInitialized: () => void;
+
   // Full reset (on sign-out)
   reset: () => void;
 }
@@ -92,6 +96,7 @@ const defaultState = {
   isRefreshing: false,
   unreadCount: 0,
   plan: 'free' as const,
+  isInitialized: false,
 };
 
 export const useAppStore = create<AppStore>()(
@@ -128,6 +133,8 @@ export const useAppStore = create<AppStore>()(
       setUnreadCount: (count) => set({ unreadCount: count }),
       setPlan: (plan) => set({ plan }),
 
+      setInitialized: () => set({ isInitialized: true }),
+
       reset: () => set(defaultState),
     }),
     {
@@ -140,6 +147,7 @@ export const useAppStore = create<AppStore>()(
         websiteProfile: state.websiteProfile,
         filters: state.filters,
         plan: state.plan,
+        // isInitialized intentionally excluded — always re-runs bootstrap on load
       }),
     }
   )
