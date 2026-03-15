@@ -9,13 +9,13 @@ import {
   Bell,
   TrendingUp,
   Plus,
-  ChevronDown,
   Radio,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { Badge } from '@/components/ui/badge';
 import { UserMenu } from '@/components/layout/UserMenu';
+import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
 
 const navItems = [
   {
@@ -53,7 +53,7 @@ const bottomItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { activeProject, unreadCount } = useAppStore();
+  const { unreadCount } = useAppStore();
 
   return (
     <aside className="w-60 h-screen bg-zinc-950 border-r border-zinc-800/50 flex flex-col fixed left-0 top-0 z-40">
@@ -67,21 +67,8 @@ export function Sidebar() {
         </Link>
       </div>
 
-      {/* Project Selector */}
-      <div className="px-3 py-3 border-b border-zinc-800/50">
-        <button className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-zinc-800/60 transition-colors group">
-          <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-md flex-shrink-0" />
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-xs font-medium text-zinc-200 truncate">
-              {activeProject?.name || 'Select Project'}
-            </p>
-            {activeProject && (
-              <p className="text-[10px] text-zinc-500 truncate">{activeProject.website_url}</p>
-            )}
-          </div>
-          <ChevronDown className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
-        </button>
-      </div>
+      {/* Project Switcher */}
+      <ProjectSwitcher />
 
       {/* Main Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
