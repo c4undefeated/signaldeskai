@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
 import { scorePost } from '@/lib/intent-scorer';
+import { rerankLeads } from '@/lib/ai';
 import { createServerClientInstance } from '@/lib/supabase.server';
+
+interface ProfileRow {
+  product_name: string | null;
+  target_customer: string | null;
+  pain_points: string[];
+  features: string[];
+  keywords: string[];
+  competitors: string[];
+  buyer_intent_phrases: string[];
+}
 
 // ── GET /api/leads — load persisted leads from DB ──────────────
 export async function GET(req: NextRequest) {
@@ -33,36 +44,69 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ leads: data || [], total: count });
 }
 
-// ── POST /api/leads — discover & persist new leads from Reddit ──
+// ── POST /api/leads — discover & rank new leads from Reddit ────
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerClientInstance();
     const { data: { user } } = await supabase.auth.getUser();
 
     const body = await req.json();
-    const { queries = [], keywords = [], competitors = [], buyer_intent_phrases = [], project_id, limit = 30 } = body;
+    const {
+      queries = [],
+      keywords = [],
+      competitors = [],
+      buyer_intent_phrases = [],
+      project_id,
+      limit = 30,
+    } = body;
 
     if (!queries.length) {
       return NextResponse.json({ error: 'Queries are required' }, { status: 400 });
     }
 
-    // ── Daily usage limit check ──────────────────────────────
+    // ── Load project + workspace plan + website profile ────────
+    let workspaceId: string | null = null;
+    let plan = 'free';
+    let websiteProfile: ProfileRow | null = null;
+
     if (user && project_id) {
       const { data: proj } = await supabase
         .from('projects')
-        .select('workspace_id, workspaces(plan)')
+        .select(`
+          workspace_id,
+          workspaces(plan),
+          website_profiles(
+            product_name,
+            target_customer,
+            pain_points,
+            features,
+            keywords,
+            competitors,
+            buyer_intent_phrases
+          )
+        `)
         .eq('id', project_id)
         .single();
 
-      const workspaces = proj?.workspaces as unknown as { plan: string } | null;
-      const plan = workspaces?.plan || 'free';
+      workspaceId = proj?.workspace_id ?? null;
+      const ws = proj?.workspaces as unknown as { plan: string } | null;
+      plan = ws?.plan ?? 'free';
+
+      const rawProfiles = proj?.website_profiles as unknown as ProfileRow | ProfileRow[] | null;
+      if (Array.isArray(rawProfiles) && rawProfiles.length > 0) {
+        websiteProfile = rawProfiles[0];
+      } else if (rawProfiles && !Array.isArray(rawProfiles)) {
+        websiteProfile = rawProfiles;
+      }
+
+      // ── Daily usage limit check ──────────────────────────────
       const dailyLimit = plan === 'pro' ? 250 : plan === 'enterprise' ? 9999 : 25;
       const today = new Date().toISOString().split('T')[0];
 
       const { data: usage } = await supabase
         .from('usage_tracking')
         .select('leads_discovered')
-        .eq('workspace_id', proj?.workspace_id)
+        .eq('workspace_id', workspaceId)
         .eq('period', today)
         .single();
 
@@ -75,11 +119,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Fetch from Reddit ─────────────────────────────────────
+    // ── Stage 1: Fetch from Reddit + deterministic scoring ─────
     const redditPosts = await fetchLeadsFromReddit(queries, 8);
 
-    // ── Score each post ───────────────────────────────────────
-    const scoredLeads = redditPosts
+    const CANDIDATE_POOL = 25;
+    const FINAL_COUNT = 20;
+    const SCORE_THRESHOLD = 15;
+
+    const deterministic = redditPosts
       .map((post) => {
         const text = `${post.title} ${post.selftext}`;
         const score = scorePost(text, keywords, competitors, buyer_intent_phrases, {
@@ -87,7 +134,7 @@ export async function POST(req: NextRequest) {
           subreddit: post.subreddit,
           comment_count: post.num_comments,
         });
-        const lead = {
+        return {
           ...redditPostToLead(post, project_id || 'demo'),
           id: `reddit_${post.id}`,
           score: {
@@ -111,23 +158,74 @@ export async function POST(req: NextRequest) {
             id: `score_${post.id}`,
           },
         };
-        return lead;
       })
-      .filter((l) => l.score.final_score >= 15)
+      .filter((l) => l.score.final_score >= SCORE_THRESHOLD)
       .sort((a, b) => b.score.final_score - a.score.final_score)
-      .slice(0, limit);
+      .slice(0, CANDIDATE_POOL);
 
-    // ── Persist to Supabase ───────────────────────────────────
+    // ── Stage 2: AI reranking (requires website profile) ───────
+    let finalLeads = deterministic.slice(0, Math.min(FINAL_COUNT, limit));
+
+    if (websiteProfile && deterministic.length > 0) {
+      try {
+        const rerankContext = {
+          product_name: websiteProfile.product_name ?? '',
+          target_customer: websiteProfile.target_customer ?? '',
+          pain_points: websiteProfile.pain_points ?? [],
+          features: websiteProfile.features ?? [],
+          keywords: websiteProfile.keywords ?? keywords,
+          competitors: websiteProfile.competitors ?? competitors,
+          buyer_intent_phrases: websiteProfile.buyer_intent_phrases ?? buyer_intent_phrases,
+        };
+
+        const rerankResults = await rerankLeads(
+          deterministic.map((l) => ({
+            title: l.title ?? '',
+            body: l.body,
+            subreddit: l.subreddit,
+          })),
+          rerankContext
+        );
+
+        // Apply AI reranking: blend scores, replace match_reasons
+        const reranked = rerankResults
+          .filter((r) => r.post_index >= 0 && r.post_index < deterministic.length)
+          .map((r) => {
+            const lead = deterministic[r.post_index];
+            const aiConfidence = Math.max(0, Math.min(100, r.intent_confidence));
+            const blendedScore = Math.round(
+              aiConfidence * 0.60 + lead.score.final_score * 0.40
+            );
+            return {
+              ...lead,
+              score: {
+                ...lead.score,
+                intent_score: aiConfidence,
+                final_score: blendedScore,
+                match_reasons: r.refined_reason
+                  ? [r.refined_reason]
+                  : lead.score.match_reasons,
+              },
+            };
+          })
+          // Keep only posts with meaningful AI confidence
+          .filter((l) => l.score.intent_score >= 30)
+          .sort((a, b) => b.score.final_score - a.score.final_score)
+          .slice(0, Math.min(FINAL_COUNT, limit));
+
+        // Fall back to deterministic if AI returned too few results
+        if (reranked.length >= 3) {
+          finalLeads = reranked;
+        }
+      } catch (aiErr) {
+        console.warn('AI reranking failed, using deterministic results:', aiErr);
+        // finalLeads stays as deterministic slice
+      }
+    }
+
+    // ── Persist to Supabase ────────────────────────────────────
     if (user && project_id) {
-      const { data: proj } = await supabase
-        .from('projects')
-        .select('workspace_id')
-        .eq('id', project_id)
-        .single();
-
-      const workspaceId = proj?.workspace_id;
-
-      for (const lead of scoredLeads) {
+      for (const lead of finalLeads) {
         const { data: dbLead } = await supabase
           .from('leads')
           .upsert({
@@ -165,30 +263,29 @@ export async function POST(req: NextRequest) {
             competitor_mentions: lead.score.competitor_mentions,
             matched_keywords: lead.score.matched_keywords,
             match_reasons: lead.score.match_reasons,
-            scoring_version: 'v2',
+            scoring_version: 'v3-ai',
           }, { onConflict: 'lead_id' });
 
-          // Update in-memory ID to DB ID
           lead.id = dbLead.id;
           lead.score.lead_id = dbLead.id;
         }
       }
 
-      // Track usage (increment, don't overwrite)
-      if (workspaceId && scoredLeads.length > 0) {
+      // Track usage
+      if (workspaceId && finalLeads.length > 0) {
         const today = new Date().toISOString().split('T')[0];
         await supabase.rpc('increment_usage', {
           p_workspace_id: workspaceId,
           p_period: today,
-          p_leads: scoredLeads.length,
+          p_leads: finalLeads.length,
         });
       }
     }
 
     return NextResponse.json({
       success: true,
-      leads: scoredLeads,
-      total: scoredLeads.length,
+      leads: finalLeads,
+      total: finalLeads.length,
       fetched_at: new Date().toISOString(),
     });
   } catch (error) {
