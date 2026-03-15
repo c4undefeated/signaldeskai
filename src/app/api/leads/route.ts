@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
 import { scorePost } from '@/lib/intent-scorer';
 import { rerankLeads } from '@/lib/ai';
+import { diversifyLeads } from '@/lib/diversity';
 import { createServerClientInstance } from '@/lib/supabase.server';
 
 interface ProfileRow {
@@ -222,6 +223,9 @@ export async function POST(req: NextRequest) {
         // finalLeads stays as deterministic slice
       }
     }
+
+    // ── Stage 3: Diversity enforcement ────────────────────────
+    finalLeads = diversifyLeads(finalLeads, Math.min(FINAL_COUNT, limit));
 
     // ── Persist to Supabase ────────────────────────────────────
     if (user && project_id) {
