@@ -59,7 +59,15 @@ Focus on:
   return JSON.parse(jsonText) as WebsiteAnalysis;
 }
 
-export type ToneVariant = 'standard' | 'less_salesy' | 'more_helpful' | 'direct';
+export type ToneVariant =
+  | 'standard'
+  | 'less_salesy'
+  | 'more_helpful'
+  | 'direct'
+  | 'insightful'
+  | 'storytelling'
+  | 'soft_recommendation'
+  | 'no_product_mention';
 
 export interface ReplyGenerationInput {
   post_title: string;
@@ -83,25 +91,38 @@ export interface GeneratedReply {
 }
 
 const TONE_DIRECTIVES: Record<ToneVariant, string> = {
-  standard:      'Balance helpfulness and a subtle product mention. Sound like a knowledgeable peer.',
-  less_salesy:   'Focus 90% on providing genuine value. Mention the product only once, very briefly, as an afterthought. No product description.',
-  more_helpful:  'Lead with deep insight and actionable advice. Mention the product only as the tool that helped you solve this exact problem.',
-  direct:        'Be slightly more explicit about what the product does, but still conversational. Mention the specific feature that applies to their problem.',
+  standard:
+    'You are a knowledgeable peer sharing a balanced take. Establish real value first. Mention the product once, naturally, only after earning the right to — never as the opening move.',
+  less_salesy:
+    'Spend 90% of the reply giving genuine, actionable advice. If you mention the product at all, it is a single throwaway clause with zero description. It is better to omit it entirely than to force it.',
+  more_helpful:
+    'Lead with deep insight or a concrete tip the user can act on right now. Mention the product only as the specific tool that enabled that insight in your own experience — never as the purpose of the reply.',
+  direct:
+    'Be clear and specific about the one product feature that directly solves their stated problem. Keep the framing conversational — a peer recommending from experience, not pitching.',
+  insightful:
+    'Open with a non-obvious observation, reframe, or data point relevant to their situation. Make the user feel like they just learned something valuable. Introduce the product only if it concretely illustrates the insight — never as the conclusion.',
+  storytelling:
+    'Anchor the reply in a brief, relatable first-person story or past experience (1–2 sentences). Let the narrative carry the recommendation naturally. The product emerges from the story; it is never stated as the subject of the reply.',
+  soft_recommendation:
+    'Offer a gentle, exploratory suggestion using language like "might be worth exploring" or "could be interesting". Validate any hesitation they have shown. Frame the product as one of several things worth looking at, not the obvious answer.',
+  no_product_mention:
+    'Do NOT mention the product, the brand name, or any tool you are promoting. Write a purely helpful reply as a knowledgeable community member. Build trust through expertise alone. Save the product mention for the DM version only.',
 };
 
 export async function generateReply(input: ReplyGenerationInput): Promise<GeneratedReply> {
   const toneVariant = input.tone_variant || 'standard';
   const toneDirective = TONE_DIRECTIVES[toneVariant];
+  const allowProductInReply = toneVariant !== 'no_product_mention';
 
-  const prompt = `You are an expert at writing authentic, helpful Reddit responses that naturally introduce a product.
+  const prompt = `You are a thoughtful Reddit community member who occasionally mentions tools they use — but only after genuinely helping first. Your reputation for giving quality advice matters more to you than promoting anything.
 
-TONE: ${toneDirective}
+TONE INSTRUCTION: ${toneDirective}
 
 CONTEXT:
 - Product: ${input.product_name}
 - Target Customer: ${input.target_customer}
-- Pain Points We Solve: ${input.pain_points.slice(0, 3).join(', ')}
-- Key Features: ${input.features.slice(0, 3).join(', ')}
+- Problems We Solve: ${input.pain_points.slice(0, 3).join(', ')}
+- Relevant Features: ${input.features.slice(0, 3).join(', ')}
 - Why This Post Matched: ${input.matched_signals.join(', ')}
 
 POST:
@@ -109,18 +130,47 @@ Title: ${input.post_title}
 Subreddit: ${input.subreddit ? 'r/' + input.subreddit : 'N/A'}
 Body: ${(input.post_body || '').slice(0, 1000)}
 
-STRICT RULES:
-1. Start with empathy — acknowledge their specific pain or question (1-2 sentences)
-2. Add genuine insight or perspective that helps them, independent of the product (2-3 sentences)
-3. Introduce the product naturally — like a peer sharing what worked for them (1-2 sentences)
-4. Max 200 words total
-5. NEVER say: "I work at", "full disclosure", "disclaimer", "check it out", "sign up"
-6. NO bullet points, NO headers, NO exclamation marks
-7. Sound like a thoughtful Reddit user, not a marketer
+REQUIRED STRUCTURE — follow this order without deviation:
 
-Also write a DM version (max 80 words) — slightly more direct but still human.
+  PHASE 1 — PAIN ACKNOWLEDGEMENT (1–2 sentences)
+  Reflect their specific situation back at them using their own words or framing.
+  Show you have genuinely been in a similar position. This must feel personal, not generic.
+  ✓ "That exact problem cost me three weeks before I worked out what was going on."
+  ✗ "That sounds really frustrating!" / "Great question!"
 
-Return ONLY valid JSON:
+  PHASE 2 — INSIGHT (2–3 sentences)
+  Provide actionable perspective, a concrete tip, or a framing shift they can use immediately.
+  This section must stand on its own as genuinely useful — even if the product is never mentioned.
+  ✓ Explain a root cause, a less obvious approach, or something they may have missed.
+  ✗ "There are many tools that can help with this." (vague bridge to promotion)
+
+  PHASE 3 — TOOL MENTION (0–2 sentences)${allowProductInReply ? `
+  Only if it adds genuine context to the insight already given. Frame as personal experience.
+  ✓ "For what it's worth, I've been using ${input.product_name} for this — it cut that friction down a lot."
+  ✗ "Check out ${input.product_name} — sign up for free and see for yourself!"` : `
+  SKIP entirely — do not mention the product, brand, or any specific tool in reply_text.`}
+
+FORBIDDEN PHRASES — if any appear in reply_text, the output is invalid:
+  click here, sign up now, sign up today, try it free, get started today, get started now,
+  limited time, use code, use my link, affiliate, sponsored, link in bio, join now, buy now,
+  exclusive deal, discount code, promo code, don't miss out, act now, claim your free,
+  check it out, I work at, full disclosure, disclaimer
+
+STYLE RULES:
+  - Max 180 words for reply_text
+  - No bullet points, no headers, no exclamation marks
+  - No more than one em-dash total
+  - Contractions are encouraged — they read as human
+  - Write in first person but keep focus on the reader's situation
+  - Never identify yourself as affiliated with or employed by the product
+
+DM VERSION (max 75 words):
+  - Warmer and more direct — this is a private message
+  - May mention ${input.product_name} explicitly, including a specific feature
+  - Open with the reader's situation or problem, not the product name
+  - Still no hard CTAs — no "sign up now", "click here", or "try it free"
+
+Return ONLY valid JSON with no markdown, no code fences, no extra text:
 {
   "reply_text": "...",
   "dm_text": "...",
