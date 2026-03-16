@@ -140,12 +140,29 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
           <div className="flex-1 min-w-0">
             {/* Meta row */}
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="text-xs font-medium text-zinc-400">
-                r/{lead.subreddit || 'reddit'}
-              </span>
+              {/* Source indicator */}
+              {lead.source === 'twitter' ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-400">
+                  {/* X (Twitter) logo */}
+                  <svg
+                    className="h-3 w-3 flex-shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-label="X (Twitter)"
+                  >
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.739l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                  X (Twitter)
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-orange-400/80">
+                  r/{lead.subreddit || 'reddit'}
+                </span>
+              )}
               <span className="text-zinc-700">·</span>
               <span className="text-xs text-zinc-500">
-                u/{lead.author || 'anonymous'}
+                {lead.source === 'twitter' ? '@' : 'u/'}
+                {lead.author || 'anonymous'}
               </span>
               <span className="text-zinc-700">·</span>
               <span className="text-xs text-zinc-500 flex items-center gap-1">

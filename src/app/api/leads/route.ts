@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
+import { searchTwitterPosts, twitterPostToLead } from '@/lib/twitter';
 import { scorePost } from '@/lib/intent-scorer';
 import { rerankLeads } from '@/lib/ai';
 import { diversifyLeads } from '@/lib/diversity';
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ leads: data || [], total: count });
 }
 
-// ── POST /api/leads — discover & rank new leads from Reddit ────
+// ── POST /api/leads — discover & rank new leads (multi-source) ─
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerClientInstance();
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
       buyer_intent_phrases = [],
       project_id,
       limit = 30,
+      sources = ['reddit'],
     } = body;
 
     if (!queries.length) {
@@ -121,46 +123,90 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Stage 1: Fetch from Reddit + deterministic scoring ─────
-    const redditPosts = await fetchLeadsFromReddit(queries, 8);
+    // ── Stage 1: Fetch from enabled sources + deterministic scoring ──
+    const activeSources: string[] = Array.isArray(sources) ? sources : ['reddit'];
 
     const CANDIDATE_POOL = 25;
     const FINAL_COUNT = 20;
     const SCORE_THRESHOLD = 15;
 
-    const deterministic = redditPosts
-      .map((post) => {
-        const text = `${post.title} ${post.selftext}`;
-        const score = scorePost(text, keywords, competitors, buyer_intent_phrases, {
-          posted_at: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null,
-          subreddit: post.subreddit,
+    // Helper: convert a scorePost() result to the score shape used downstream
+    const buildScoreShape = (
+      score: ReturnType<typeof scorePost>,
+      localId: string,
+    ) => ({
+      intent_score:       score.intent_score,
+      pain_score:         score.pain_score,
+      urgency_score:      score.urgency_score,
+      relevance_score:    score.relevance_score,
+      final_score:        score.final_score,
+      freshness_score:    score.freshness_score,
+      community_score:    score.community_score,
+      competitor_bonus:   score.competitor_bonus,
+      unanswered_bonus:   score.unanswered_bonus,
+      buying_signals:     score.signals.buying_signals,
+      pain_signals:       score.signals.pain_signals,
+      urgency_signals:    score.signals.urgency_signals,
+      competitor_mentions: score.signals.competitor_signals,
+      matched_keywords:   score.signals.matched_keywords,
+      match_reasons:      score.match_reasons,
+      scored_at:          new Date().toISOString(),
+      lead_id: localId,
+      id:      `score_${localId}`,
+    });
+
+    // Parallel fetch from all active sources
+    const [redditPosts, twitterPosts] = await Promise.all([
+      activeSources.includes('reddit')
+        ? fetchLeadsFromReddit(queries, 8)
+        : Promise.resolve([]),
+      activeSources.includes('twitter')
+        ? searchTwitterPosts(queries, 10)
+        : Promise.resolve([]),
+    ]);
+
+    // Score Reddit candidates
+    const redditCandidates = redditPosts.map((post) => {
+      const localId = `reddit_${post.id}`;
+      const score = scorePost(
+        `${post.title} ${post.selftext}`,
+        keywords, competitors, buyer_intent_phrases,
+        {
+          posted_at: post.created_utc
+            ? new Date(post.created_utc * 1000).toISOString()
+            : null,
+          subreddit:     post.subreddit,
           comment_count: post.num_comments,
-        });
-        return {
-          ...redditPostToLead(post, project_id || 'demo'),
-          id: `reddit_${post.id}`,
-          score: {
-            intent_score: score.intent_score,
-            pain_score: score.pain_score,
-            urgency_score: score.urgency_score,
-            relevance_score: score.relevance_score,
-            final_score: score.final_score,
-            freshness_score: score.freshness_score,
-            community_score: score.community_score,
-            competitor_bonus: score.competitor_bonus,
-            unanswered_bonus: score.unanswered_bonus,
-            buying_signals: score.signals.buying_signals,
-            pain_signals: score.signals.pain_signals,
-            urgency_signals: score.signals.urgency_signals,
-            competitor_mentions: score.signals.competitor_signals,
-            matched_keywords: score.signals.matched_keywords,
-            match_reasons: score.match_reasons,
-            scored_at: new Date().toISOString(),
-            lead_id: `reddit_${post.id}`,
-            id: `score_${post.id}`,
-          },
-        };
-      })
+        },
+      );
+      return {
+        ...redditPostToLead(post, project_id || 'demo'),
+        id: localId,
+        score: buildScoreShape(score, localId),
+      };
+    });
+
+    // Score Twitter candidates using the same pipeline
+    const twitterCandidates = twitterPosts.map((post) => {
+      const localId = `twitter_${post.id}`;
+      const score = scorePost(
+        post.text,
+        keywords, competitors, buyer_intent_phrases,
+        {
+          posted_at:     post.created_at ?? null,
+          subreddit:     undefined,
+          comment_count: post.public_metrics?.reply_count ?? 0,
+        },
+      );
+      return {
+        ...twitterPostToLead(post, project_id || 'demo'),
+        id: localId,
+        score: buildScoreShape(score, localId),
+      };
+    });
+
+    // Merge, filter, and rank the combined candidate pool
+    const deterministic = [...redditCandidates, ...twitterCandidates]
       .filter((l) => l.score.final_score >= SCORE_THRESHOLD)
       .sort((a, b) => b.score.final_score - a.score.final_score)
       .slice(0, CANDIDATE_POOL);
