@@ -7,6 +7,10 @@
     {
       "path": "/api/scan",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/jobs/discover-leads",
+      "schedule": "*/30 * * * *"
     }
   ],
   "functions": {
@@ -20,6 +24,9 @@
       "maxDuration": 60
     },
     "src/app/api/scan/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/jobs/discover-leads/route.ts": {
       "maxDuration": 300
     }
   }
