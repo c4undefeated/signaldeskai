@@ -60,6 +60,11 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       // 3. Restore active project (use cached value if available)
       if (!activeProject) {
         const projRes = await fetch(`/api/projects?workspace_id=${resolvedWorkspaceId}`);
+        if (projRes.status === 401) {
+          // Session not recognised server-side — redirect to sign-in
+          router.replace('/auth');
+          return;
+        }
         const projData = await projRes.json();
         const projects: ProjectWithProfile[] = projData.projects ?? [];
 
@@ -101,10 +106,10 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         if (event === 'SIGNED_OUT') {
           reset();
           router.replace('/auth');
-        } else if (event === 'SIGNED_IN' && session?.user) {
-          // Re-bootstrap on new sign-in (store was reset by SIGNED_OUT)
-          router.refresh();
         }
+        // SIGNED_IN fires immediately on subscription with the current session —
+        // skip it here because bootstrap() already handles the initial load above.
+        // Only react to TOKEN_REFRESHED to keep server-side cookies fresh.
       }
     );
 
