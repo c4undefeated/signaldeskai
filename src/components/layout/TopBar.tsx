@@ -1,6 +1,6 @@
 'use client';
 
-import { RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, Search, SlidersHorizontal, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/useAppStore';
@@ -23,22 +23,31 @@ export function TopBar({
   showSearch = false,
   actions,
 }: TopBarProps) {
-  const { isRefreshing, filters, setFilters } = useAppStore();
+  const { isRefreshing, filters, setFilters, setSidebarOpen } = useAppStore();
 
   return (
-    <div className="h-14 border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-30">
+    <div className="h-14 border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm flex items-center px-3 sm:px-6 gap-2 sm:gap-4 sticky top-0 z-30">
+      {/* Hamburger — mobile only */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="lg:hidden p-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 flex-shrink-0"
+        aria-label="Open menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <h1 className="text-sm font-semibold text-zinc-100">{title}</h1>
+          <h1 className="text-sm font-semibold text-zinc-100 truncate">{title}</h1>
           {subtitle && (
-            <span className="text-xs text-zinc-500">{subtitle}</span>
+            <span className="text-xs text-zinc-500 hidden sm:inline">{subtitle}</span>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {showSearch && (
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Input
               placeholder="Search leads..."
               value={filters.search || ''}
