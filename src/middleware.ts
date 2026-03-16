@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@/lib/supabase';
 
 // Routes that require authentication
-const PROTECTED_ROUTES = ['/leads', '/saved', '/settings', '/notifications', '/onboarding'];
+const PROTECTED_ROUTES = ['/leads', '/saved', '/settings', '/notifications', '/onboarding', '/signals'];
 // Routes only for unauthenticated users
 const AUTH_ROUTES = ['/auth'];
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
   const supabase = createMiddlewareClient(request, response);
 
-  // Refresh session if expired — required for Server Components
+  // Refresh session — required for Server Components and API routes to see auth
   const { data: { user } } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
@@ -35,6 +35,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|webmanifest|js)$).*)',
   ],
 };

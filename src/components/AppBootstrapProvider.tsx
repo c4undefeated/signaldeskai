@@ -59,9 +59,27 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
 
       // 3. Restore active project (use cached value if available)
       if (!activeProject) {
-        const projRes = await fetch(`/api/projects?workspace_id=${resolvedWorkspaceId}`);
+        // Query by workspace_id if available; fall back to all user projects (RLS scoped)
+        const projectsUrl = resolvedWorkspaceId
+          ? `/api/projects?workspace_id=${resolvedWorkspaceId}`
+          : '/api/projects';
+        const projRes = await fetch(projectsUrl);
+        if (projRes.status === 401) {
+          router.replace('/auth');
+          return;
+        }
         const projData = await projRes.json();
-        const projects: ProjectWithProfile[] = projData.projects ?? [];
+        let projects: ProjectWithProfile[] = projData.projects ?? [];
+
+        // If workspace-scoped query found nothing, retry without workspace filter
+        // (handles workspace ID mismatch from stale state)
+        if (projects.length === 0 && resolvedWorkspaceId) {
+          const fallbackRes = await fetch('/api/projects');
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            projects = fallbackData.projects ?? [];
+          }
+        }
 
         if (projects.length === 0) {
           setInitialized();
@@ -76,7 +94,43 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         const profiles = project.website_profiles;
         const profile: WebsiteProfile | null =
           Array.isArray(profiles) && profiles.length > 0 ? profiles[0] : null;
-        if (profile) setWebsiteProfile(profile);
+
+        if (profile) {
+          setWebsiteProfile(profile);
+        } else if (project.website_url) {
+          // Profile missing from DB (e.g. created before profile-persist was fixed).
+          // Re-analyze silently in the background so leads can work immediately.
+          fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: project.website_url, project_id: project.id }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.success && d.analysis) {
+                const rebuilt: WebsiteProfile = {
+                  id: `profile_${project.id}`,
+                  project_id: project.id,
+                  product_name: d.analysis.product_name,
+                  category: d.analysis.category,
+                  target_customer: d.analysis.target_customer,
+                  pain_points: d.analysis.pain_points ?? [],
+                  features: d.analysis.features ?? [],
+                  keywords: d.analysis.keywords ?? [],
+                  buyer_intent_phrases: d.analysis.buyer_intent_phrases ?? [],
+                  competitors: d.analysis.competitors ?? [],
+                  industry: d.analysis.industry,
+                  pricing_signals: d.analysis.pricing_signals,
+                  raw_analysis: d.analysis,
+                  crawled_pages: [],
+                  analyzed_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                };
+                setWebsiteProfile(rebuilt);
+              }
+            })
+            .catch(() => {}); // non-critical
+        }
       }
 
       // 5. Load unread notification count (non-critical)
@@ -101,10 +155,10 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         if (event === 'SIGNED_OUT') {
           reset();
           router.replace('/auth');
-        } else if (event === 'SIGNED_IN' && session?.user) {
-          // Re-bootstrap on new sign-in (store was reset by SIGNED_OUT)
-          router.refresh();
         }
+        // SIGNED_IN fires immediately on subscription with the current session —
+        // skip it here because bootstrap() already handles the initial load above.
+        // Only react to TOKEN_REFRESHED to keep server-side cookies fresh.
       }
     );
 

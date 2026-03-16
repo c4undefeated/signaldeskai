@@ -260,8 +260,8 @@ export async function POST(req: NextRequest) {
               },
             };
           })
-          // Keep only posts with meaningful AI confidence
-          .filter((l) => l.score.intent_score >= 30)
+          // Keep posts with any positive AI confidence (deterministic already filtered at 15)
+          .filter((l) => l.score.intent_score > 0)
           .sort((a, b) => b.score.final_score - a.score.final_score)
           .slice(0, Math.min(FINAL_COUNT, limit));
 

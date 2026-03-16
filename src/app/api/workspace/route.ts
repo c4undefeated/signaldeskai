@@ -31,11 +31,22 @@ export async function POST(req: NextRequest) {
     .from('workspace_members')
     .select('workspace_id, workspaces(id, name, plan, slug)')
     .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
     .limit(1)
     .single();
 
   if (existing?.workspace_id) {
-    return NextResponse.json({ workspace: existing.workspaces });
+    // If the join returned the workspace object, return it directly
+    if (existing.workspaces) {
+      return NextResponse.json({ workspace: existing.workspaces });
+    }
+    // Join may have been filtered by RLS — query the workspace directly
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .select('id, name, plan, slug')
+      .eq('id', existing.workspace_id)
+      .single();
+    if (ws) return NextResponse.json({ workspace: ws });
   }
 
   // Create workspace
