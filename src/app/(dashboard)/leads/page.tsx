@@ -210,14 +210,12 @@ export default function LeadsPage() {
           <EmptyState hasProject={false} />
         )}
 
-        {/* Project set up but no profile */}
+        {/* Project set up but profile is being rebuilt */}
         {hasProject && !websiteProfile && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <AlertCircle className="h-8 w-8 text-yellow-400 mb-3" />
-            <p className="text-sm text-zinc-400 mb-4">Website analysis required</p>
-            <Button onClick={() => router.push('/onboarding')}>
-              Complete Setup
-            </Button>
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+            <p className="text-sm text-zinc-400">Rebuilding website profile…</p>
+            <p className="text-xs text-zinc-600">This takes about 15 seconds</p>
           </div>
         )}
 

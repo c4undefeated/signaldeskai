@@ -94,7 +94,43 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         const profiles = project.website_profiles;
         const profile: WebsiteProfile | null =
           Array.isArray(profiles) && profiles.length > 0 ? profiles[0] : null;
-        if (profile) setWebsiteProfile(profile);
+
+        if (profile) {
+          setWebsiteProfile(profile);
+        } else if (project.website_url) {
+          // Profile missing from DB (e.g. created before profile-persist was fixed).
+          // Re-analyze silently in the background so leads can work immediately.
+          fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: project.website_url, project_id: project.id }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.success && d.analysis) {
+                const rebuilt: WebsiteProfile = {
+                  id: `profile_${project.id}`,
+                  project_id: project.id,
+                  product_name: d.analysis.product_name,
+                  category: d.analysis.category,
+                  target_customer: d.analysis.target_customer,
+                  pain_points: d.analysis.pain_points ?? [],
+                  features: d.analysis.features ?? [],
+                  keywords: d.analysis.keywords ?? [],
+                  buyer_intent_phrases: d.analysis.buyer_intent_phrases ?? [],
+                  competitors: d.analysis.competitors ?? [],
+                  industry: d.analysis.industry,
+                  pricing_signals: d.analysis.pricing_signals,
+                  raw_analysis: d.analysis,
+                  crawled_pages: [],
+                  analyzed_at: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                };
+                setWebsiteProfile(rebuilt);
+              }
+            })
+            .catch(() => {}); // non-critical
+        }
       }
 
       // 5. Load unread notification count (non-critical)
