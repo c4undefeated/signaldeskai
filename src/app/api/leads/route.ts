@@ -6,6 +6,7 @@ import { rerankLeads } from '@/lib/ai';
 import { diversifyLeads } from '@/lib/diversity';
 import { buildBehaviorProfile, applyBehaviorBoost } from '@/lib/behavioral-scorer';
 import { createServerClientInstance } from '@/lib/supabase.server';
+import { buildLeadClusters, type LeadSignalInput } from '@/lib/intent-clustering';
 
 interface ProfileRow {
   product_name: string | null;
@@ -338,6 +339,50 @@ export async function POST(req: NextRequest) {
           p_period: today,
           p_leads: finalLeads.length,
         });
+      }
+
+      // ── Update intent clusters ──────────────────────────────
+      // Runs after leads are persisted (we have real DB ids now).
+      // Errors are swallowed so a clustering failure never blocks
+      // the discovery response.
+      if (finalLeads.length > 0) {
+        try {
+          const inputs: LeadSignalInput[] = finalLeads
+            .filter((l) => l.id && l.score)
+            .map((l) => ({
+              id:                  l.id,
+              title:               l.title,
+              body:                l.body,
+              subreddit:           l.subreddit,
+              buying_signals:      l.score.buying_signals      ?? [],
+              pain_signals:        l.score.pain_signals        ?? [],
+              urgency_signals:     l.score.urgency_signals     ?? [],
+              competitor_mentions: l.score.competitor_mentions ?? [],
+              intent_score:        l.score.intent_score        ?? 0,
+            }));
+
+          const clusters = buildLeadClusters(project_id, inputs);
+          for (const c of clusters) {
+            await supabase.from('lead_clusters').upsert(
+              {
+                project_id:       c.project_id,
+                intent_type:      c.intent_type,
+                cluster_name:     c.cluster_name,
+                cluster_summary:  c.cluster_summary,
+                lead_ids:         c.lead_ids,
+                signal_count:     c.signal_count,
+                avg_intent_score: c.avg_intent_score,
+                top_competitors:  c.top_competitors,
+                top_pain_phrases: c.top_pain_phrases,
+                top_subreddits:   c.top_subreddits,
+                updated_at:       new Date().toISOString(),
+              },
+              { onConflict: 'project_id,intent_type' },
+            );
+          }
+        } catch (clusterErr) {
+          console.warn('[Clustering] Update failed (non-critical):', clusterErr);
+        }
       }
     }
 
