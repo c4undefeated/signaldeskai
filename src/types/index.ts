@@ -136,12 +136,29 @@ export interface Alert {
   created_at: string;
 }
 
+/** One fired alert instance — written by the background job to alert_events. */
+export interface AlertEvent {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  project_id: string;
+  alert_type: 'high_intent' | 'competitor_mention' | 'daily_digest';
+  delivery_channels: string[];
+  score_snapshot: {
+    intent_score: number;
+    freshness_score: number;
+    final_score: number;
+  };
+  sent_at: string;
+}
+
 export interface Notification {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  workspace_id?: string | null;
   title: string;
   message: string;
-  type: 'info' | 'lead' | 'alert' | 'system';
+  type: 'info' | 'lead' | 'alert' | 'system' | 'digest';
   read: boolean;
   data: Record<string, unknown>;
   created_at: string;

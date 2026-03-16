@@ -4,6 +4,7 @@ import { fetchLeadsFromReddit, redditPostToLead } from '@/lib/reddit';
 import { searchTwitterPosts, twitterPostToLead } from '@/lib/twitter';
 import { scorePost, generateSearchQueries } from '@/lib/intent-scorer';
 import { buildLeadClusters, type LeadSignalInput } from '@/lib/intent-clustering';
+import { fireAlerts, type AlertLead, type AlertScore } from '@/lib/alerts';
 
 // POST /api/jobs/discover-leads
 // Autonomous background job: runs every 30 minutes via Vercel cron.
@@ -127,12 +128,6 @@ export async function POST(req: NextRequest) {
       ]);
 
       // Score all candidates and merge into a single ranked pool
-      const scoreOpts = (opts: {
-        posted_at?: string | null;
-        subreddit?: string;
-        comment_count?: number;
-      }) => scorePost('', keywords, competitors, buyerIntentPhrases, opts);
-
       const candidates = [
         ...redditPosts.map((post) => ({
           lead: redditPostToLead(post, project.id),
@@ -170,6 +165,8 @@ export async function POST(req: NextRequest) {
       // Upsert leads + scores; track which rows were newly inserted
       const now = Date.now();
       const newLeadIds: string[] = [];
+      const newAlertLeads: AlertLead[] = [];
+      const alertScoreMap = new Map<string, AlertScore>();
       const clusterInputs: LeadSignalInput[] = [];
 
       for (const { lead, score } of candidates) {
@@ -200,7 +197,34 @@ export async function POST(req: NextRequest) {
         // created_at is only set on INSERT; existing rows keep their original date.
         // A recent timestamp means this is a genuinely new lead.
         const isNew = now - new Date(dbLead.created_at).getTime() < NEW_LEAD_WINDOW_MS;
-        if (isNew) newLeadIds.push(dbLead.id);
+        if (isNew) {
+          newLeadIds.push(dbLead.id);
+          newAlertLeads.push({
+            id: dbLead.id,
+            title: lead.title ?? null,
+            url: lead.url,
+            subreddit: lead.subreddit ?? null,
+            author: lead.author ?? null,
+            comment_count: lead.comment_count ?? 0,
+            posted_at: lead.posted_at ?? null,
+            source: lead.source,
+            project_id: project.id,
+          });
+        }
+
+        // Keep score for every candidate (new and existing) so alert scoring
+        // uses the freshly computed value rather than re-fetching from the DB.
+        alertScoreMap.set(dbLead.id, {
+          intent_score: score.intent_score,
+          freshness_score: score.freshness_score,
+          final_score: score.final_score,
+          match_reasons: score.match_reasons,
+          signals: {
+            buying_signals: score.signals.buying_signals,
+            pain_signals: score.signals.pain_signals,
+            competitor_signals: score.signals.competitor_signals,
+          },
+        });
 
         await db.from('lead_scores').upsert(
           {
@@ -277,46 +301,13 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Fire high-intent alerts for newly inserted leads
-      let alertsFired = 0;
-      if (newLeadIds.length > 0 && workspaceId) {
-        const { data: activeAlerts } = await db
-          .from('alerts')
-          .select('user_id, threshold')
-          .eq('project_id', project.id)
-          .eq('alert_type', 'high_intent')
-          .eq('is_active', true);
-
-        if (activeAlerts?.length) {
-          const { data: newLeadScores } = await db
-            .from('lead_scores')
-            .select('lead_id, final_score')
-            .in('lead_id', newLeadIds);
-
-          for (const alert of activeAlerts) {
-            const threshold = alert.threshold ?? 70;
-            const highIntentLeads = (newLeadScores ?? []).filter(
-              (s) => s.final_score >= threshold,
-            );
-
-            if (highIntentLeads.length > 0) {
-              await db.from('notifications').insert({
-                user_id: alert.user_id,
-                workspace_id: workspaceId,
-                type: 'alert',
-                title: `${highIntentLeads.length} high-intent lead${highIntentLeads.length > 1 ? 's' : ''} discovered`,
-                message: `${highIntentLeads.length} new lead${highIntentLeads.length > 1 ? 's' : ''} scored ${threshold}+ for your project.`,
-                read: false,
-                data: {
-                  lead_ids: highIntentLeads.map((l) => l.lead_id),
-                  project_id: project.id,
-                },
-              });
-              alertsFired++;
-            }
-          }
-        }
-      }
+      // Fire high-intent alerts for newly inserted leads.
+      // Criteria: intent_score > 85 AND freshness_score > 70 AND comment_count < 3.
+      // Handles in-app notifications, email, Slack (stubbed), and audit log.
+      const alertsFired =
+        newAlertLeads.length > 0 && workspaceId
+          ? await fireAlerts(db, newAlertLeads, alertScoreMap, project.id, workspaceId)
+          : 0;
 
       totalNewLeads += newLeadIds.length;
       results.push({ project_id: project.id, new_leads: newLeadIds.length, alerts_fired: alertsFired });
