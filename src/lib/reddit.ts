@@ -156,7 +156,7 @@ export async function fetchLeadsFromReddit(
         // Search across general subreddits
         posts = await searchReddit(query, {
           sort: 'relevance',
-          time: 'week',
+          time: 'month',
           limit: maxPostsPerQuery,
         });
       }

@@ -11,7 +11,7 @@ import { fireAlerts, type AlertLead, type AlertScore } from '@/lib/alerts';
 // Loops through all active projects, fetches from Reddit + Twitter,
 // scores posts, persists new leads, and fires high-intent alerts.
 
-const SCORE_THRESHOLD = 15;
+const SCORE_THRESHOLD = 10;
 const CANDIDATES_PER_PROJECT = 30;
 const REDDIT_PER_QUERY = 8;
 const TWITTER_PER_QUERY = 10;
