@@ -82,7 +82,7 @@ function StatsBar({ leads }: { leads: Lead[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-3 mb-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       {stats.map(({ label, value, icon: Icon, color }) => (
         <div
           key={label}

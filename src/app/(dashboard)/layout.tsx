@@ -1,5 +1,5 @@
-import { Sidebar } from '@/components/layout/Sidebar';
 import { AppBootstrapProvider } from '@/components/AppBootstrapProvider';
+import { DashboardShell } from '@/components/layout/DashboardShell';
 
 export default function DashboardLayout({
   children,
@@ -8,12 +8,7 @@ export default function DashboardLayout({
 }) {
   return (
     <AppBootstrapProvider>
-      <div className="flex h-screen bg-zinc-950 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 ml-60 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+      <DashboardShell>{children}</DashboardShell>
     </AppBootstrapProvider>
   );
 }

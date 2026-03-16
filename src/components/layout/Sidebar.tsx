@@ -12,6 +12,7 @@ import {
   Plus,
   Radio,
   Zap,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
@@ -154,18 +155,35 @@ const bottomItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { unreadCount } = useAppStore();
+  const { unreadCount, sidebarOpen, setSidebarOpen } = useAppStore();
 
   return (
-    <aside className="w-60 h-screen bg-zinc-950 border-r border-zinc-800/50 flex flex-col fixed left-0 top-0 z-40">
+    <aside
+      className={cn(
+        'w-60 h-dvh bg-zinc-950 border-r border-zinc-800/50 flex flex-col fixed left-0 top-0 z-40',
+        'transition-transform duration-200 ease-in-out',
+        // Mobile: hidden by default, slide in when open
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        // Desktop: always visible
+        'lg:translate-x-0',
+      )}
+    >
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-zinc-800/50">
-        <Link href="/leads" className="flex items-center gap-2.5">
+        <Link href="/leads" className="flex items-center gap-2.5 flex-1">
           <div className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center shadow-lg shadow-violet-600/30">
             <Radio className="h-4 w-4 text-white" />
           </div>
           <span className="font-semibold text-white text-sm">SignalDesk AI</span>
         </Link>
+        {/* Close button — mobile only */}
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="lg:hidden p-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+          aria-label="Close menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Project Switcher */}

@@ -303,7 +303,7 @@ function IntentClustersSection({ clusters }: { clusters: IntentCluster[] }) {
       </div>
 
       {/* Cluster cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {clusters.map((cluster) => {
           const cfg = INTENT_CONFIG[cluster.intent_type] ?? INTENT_CONFIG.recommendations;
           const Icon = cfg.icon;
@@ -592,12 +592,12 @@ export default function SignalsPage() {
         {/* Loading */}
         {loading && hasProject && (
           <>
-            <div className="grid grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 h-16 skeleton" />
               ))}
             </div>
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="space-y-5">
                 <CardSkeleton rows={6} />
                 <CardSkeleton rows={4} />
@@ -619,7 +619,7 @@ export default function SignalsPage() {
         {!loading && hasProject && hasData && data && (
           <>
             {/* Stat row */}
-            <div className="grid grid-cols-5 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
               <StatBox
                 label="Leads Analysed"
                 value={data.meta.total_leads}
@@ -664,7 +664,7 @@ export default function SignalsPage() {
             <IntentClustersSection clusters={intentClusters} />
 
             {/* 2-column grid */}
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Left column */}
               <div className="space-y-5">
                 <CompetitorCard competitors={data.competitors} />

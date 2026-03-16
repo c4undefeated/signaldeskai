@@ -47,6 +47,25 @@ body {
   animation: shimmer 1.5s infinite;
 }
 
+/* Safe-area utilities for notched phones */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Dynamic viewport height */
+.min-h-dvh {
+  min-height: 100dvh;
+}
+
+/* Prevent double-tap zoom on touch */
+button, a {
+  touch-action: manipulation;
+}
+
 /* AI-generated text */
 .ai-text p {
   margin-bottom: 0.75rem;

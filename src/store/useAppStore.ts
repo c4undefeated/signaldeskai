@@ -60,6 +60,10 @@ interface AppStore {
   isInitialized: boolean;
   setInitialized: () => void;
 
+  // Mobile sidebar (never persisted)
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+
   // Full reset (on sign-out)
   reset: () => void;
 }
@@ -97,6 +101,7 @@ const defaultState = {
   unreadCount: 0,
   plan: 'free' as const,
   isInitialized: false,
+  sidebarOpen: false,
 };
 
 export const useAppStore = create<AppStore>()(
@@ -134,6 +139,7 @@ export const useAppStore = create<AppStore>()(
       setPlan: (plan) => set({ plan }),
 
       setInitialized: () => set({ isInitialized: true }),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
       reset: () => set(defaultState),
     }),
