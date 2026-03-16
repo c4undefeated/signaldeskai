@@ -59,14 +59,27 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
 
       // 3. Restore active project (use cached value if available)
       if (!activeProject) {
-        const projRes = await fetch(`/api/projects?workspace_id=${resolvedWorkspaceId}`);
+        // Query by workspace_id if available; fall back to all user projects (RLS scoped)
+        const projectsUrl = resolvedWorkspaceId
+          ? `/api/projects?workspace_id=${resolvedWorkspaceId}`
+          : '/api/projects';
+        const projRes = await fetch(projectsUrl);
         if (projRes.status === 401) {
-          // Session not recognised server-side — redirect to sign-in
           router.replace('/auth');
           return;
         }
         const projData = await projRes.json();
-        const projects: ProjectWithProfile[] = projData.projects ?? [];
+        let projects: ProjectWithProfile[] = projData.projects ?? [];
+
+        // If workspace-scoped query found nothing, retry without workspace filter
+        // (handles workspace ID mismatch from stale state)
+        if (projects.length === 0 && resolvedWorkspaceId) {
+          const fallbackRes = await fetch('/api/projects');
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            projects = fallbackData.projects ?? [];
+          }
+        }
 
         if (projects.length === 0) {
           setInitialized();

@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClientInstance } from '@/lib/supabase.server';
 
-// GET /api/projects — list projects for current workspace
+// GET /api/projects — list projects for current user (workspace_id optional)
 export async function GET(req: NextRequest) {
   const supabase = await createServerClientInstance();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const workspaceId = req.nextUrl.searchParams.get('workspace_id');
-  if (!workspaceId) return NextResponse.json({ error: 'workspace_id required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('projects')
     .select('*, website_profiles(*)')
-    .eq('workspace_id', workspaceId)
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 
+  // Scope to workspace if provided, otherwise RLS handles user scoping
+  if (workspaceId) {
+    query = query.eq('workspace_id', workspaceId);
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ projects: data });
 }
