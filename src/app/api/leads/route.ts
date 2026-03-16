@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     const CANDIDATE_POOL = 25;
     const FINAL_COUNT = 20;
-    const SCORE_THRESHOLD = 15;
+    const SCORE_THRESHOLD = 10;
 
     // Helper: convert a scorePost() result to the score shape used downstream
     const buildScoreShape = (
