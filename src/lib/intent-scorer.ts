@@ -20,6 +20,7 @@ export interface IntentScore {
   competitor_bonus: number;
   unanswered_bonus: number;
   final_score: number;
+  opportunity_score: number;
   signals: IntentSignals;
   match_reasons: string[];
 }
@@ -86,12 +87,62 @@ function getFreshnessScore(postedAt: string | null): number {
   return 15;
 }
 
+// ── Opportunity score helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns how "open" this thread still is based on reply count.
+ * Zero replies = 100 (be the first responder). Degrades quickly.
+ */
+function getUnansweredFactor(commentCount: number): number {
+  if (commentCount === 0) return 100;
+  if (commentCount === 1) return 75;
+  if (commentCount === 2) return 50;
+  return Math.max(0, 100 - commentCount * 20);
+}
+
+/**
+ * Measures how actively a post is being seen while still having room for
+ * a response. High upvotes per hour = many eyes; heavy comments = window closing.
+ */
+function getEngagementVelocityScore(
+  upvotes: number,
+  commentCount: number,
+  postedAt: string | null,
+): number {
+  if (!postedAt) return 30;
+  const ageHours = Math.max(
+    (Date.now() - new Date(postedAt).getTime()) / 3_600_000,
+    0.5,
+  );
+  const viewsPerHour = upvotes / ageHours;
+  // Penalise posts that are already well-answered (closing window)
+  const answerPenalty = Math.min(commentCount * 15, 60);
+  return Math.max(0, Math.min(Math.round(viewsPerHour / 2 - answerPenalty), 100));
+}
+
+/**
+ * Maps an opportunity_score to a human-readable tier label.
+ * Exported so UI components can use it without reimplementing the thresholds.
+ */
+export function getOpportunityLabel(score: number): 'High' | 'Medium' | 'Low' {
+  if (score >= 70) return 'High';
+  if (score >= 40) return 'Medium';
+  return 'Low';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function scorePost(
   text: string,
   keywords: string[] = [],
   competitors: string[] = [],
   buyerIntentPhrases: string[] = [],
-  options: { posted_at?: string | null; subreddit?: string; comment_count?: number } = {}
+  options: {
+    posted_at?: string | null;
+    subreddit?: string;
+    comment_count?: number;
+    upvotes?: number;
+  } = {}
 ): IntentScore {
   const norm = text.toLowerCase();
 
@@ -145,6 +196,24 @@ export function scorePost(
     competitor_bonus + unanswered_bonus
   ), 100);
 
+  // ── Opportunity score ────────────────────────────────────────────────────────
+  // Estimates how valuable it is to engage with this lead *right now*.
+  // Weights: intent (35%) + freshness (25%) + unanswered window (20%) +
+  //          community quality (10%) + engagement velocity (10%)
+  const unanswered_factor    = getUnansweredFactor(options.comment_count ?? 0);
+  const engagement_velocity  = getEngagementVelocityScore(
+    options.upvotes ?? 0,
+    options.comment_count ?? 0,
+    options.posted_at ?? null,
+  );
+  const opportunity_score = Math.min(Math.round(
+    intent_score        * 0.35 +
+    freshness_score     * 0.25 +
+    unanswered_factor   * 0.20 +
+    community_score     * 0.10 +
+    engagement_velocity * 0.10
+  ), 100);
+
   const match_reasons: string[] = [];
   if (signals.buying_signals.length > 0)     match_reasons.push('Asking for recommendations');
   if (signals.pain_signals.length > 0)       match_reasons.push('Pain point detected');
@@ -156,7 +225,7 @@ export function scorePost(
 
   return { intent_score, pain_score, urgency_score, relevance_score,
     freshness_score, community_score, competitor_bonus, unanswered_bonus,
-    final_score, signals, match_reasons };
+    final_score, opportunity_score, signals, match_reasons };
 }
 
 export function generateSearchQueries(

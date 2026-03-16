@@ -91,12 +91,19 @@ export interface LeadScore {
   pain_score: number;
   urgency_score: number;
   relevance_score: number;
+  freshness_score: number;
+  community_score: number;
+  competitor_bonus: number;
+  unanswered_bonus: number;
+  final_score: number;
+  opportunity_score: number;
   buying_signals: string[];
   pain_signals: string[];
   urgency_signals: string[];
   competitor_mentions: string[];
   matched_keywords: string[];
   match_reasons: string[];
+  scoring_version: string;
   scored_at: string;
 }
 
