@@ -16,12 +16,27 @@ import {
   Layers,
   Radio,
   RefreshCw,
+  Lightbulb,
+  Sparkles,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { TopBar } from '@/components/layout/TopBar';
 import { cn } from '@/lib/utils';
+import type { IntentClusterType } from '@/lib/intent-clustering';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface IntentCluster {
+  id?: string;
+  intent_type: IntentClusterType;
+  cluster_name: string;
+  cluster_summary: string;
+  signal_count: number;
+  avg_intent_score: number;
+  top_competitors: string[];
+  top_pain_phrases: string[];
+  top_subreddits: string[];
+}
 
 interface Competitor {
   name: string;
@@ -79,6 +94,16 @@ const CLUSTER_COLORS: Record<string, string> = {
   'Technical Issues': 'text-red-400 bg-red-500/10 border-red-500/20',
   'Scale & Growth': 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
   'Other Signals': 'text-zinc-400 bg-zinc-800 border-zinc-700',
+};
+
+// ── Intent cluster type config ────────────────────────────────────────────────
+
+const INTENT_CONFIG: Record<string, { icon: React.ElementType; text: string; bg: string; border: string }> = {
+  recommendations:    { icon: Lightbulb,       text: 'text-violet-400', bg: 'bg-violet-500/10',  border: 'border-violet-500/20' },
+  competitor_switch:  { icon: ArrowLeftRight,  text: 'text-orange-400', bg: 'bg-orange-500/10',  border: 'border-orange-500/20' },
+  budget_concerns:    { icon: DollarSign,      text: 'text-yellow-400', bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20' },
+  urgent_help:        { icon: AlertTriangle,   text: 'text-red-400',    bg: 'bg-red-500/10',     border: 'border-red-500/20'    },
+  feature_comparison: { icon: Puzzle,          text: 'text-blue-400',   bg: 'bg-blue-500/10',    border: 'border-blue-500/20'   },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -254,6 +279,94 @@ function PainPointsCard({ painPoints }: { painPoints: PainPoint[] }) {
   );
 }
 
+// ── Intent Clusters section ───────────────────────────────────────────────────
+// Full-width section showing AI-detected buying-intent clusters, each with a
+// natural-language summary generated from the underlying lead signals.
+
+function IntentClustersSection({ clusters }: { clusters: IntentCluster[] }) {
+  if (clusters.length === 0) return null;
+
+  return (
+    <div className="mb-5">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className="w-7 h-7 bg-emerald-500/15 rounded-lg flex items-center justify-center">
+          <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+        </div>
+        <h2 className="text-sm font-semibold text-zinc-200">Intent Clusters</h2>
+        <span className="text-xs text-zinc-600 ml-1">
+          — buying conversations grouped by signal type
+        </span>
+        <span className="ml-auto text-xs text-zinc-600 tabular-nums">
+          {clusters.length} active
+        </span>
+      </div>
+
+      {/* Cluster cards */}
+      <div className="grid grid-cols-3 gap-3">
+        {clusters.map((cluster) => {
+          const cfg = INTENT_CONFIG[cluster.intent_type] ?? INTENT_CONFIG.recommendations;
+          const Icon = cfg.icon;
+
+          return (
+            <div
+              key={cluster.intent_type}
+              className={cn(
+                'rounded-xl border bg-zinc-900 p-4 transition-colors hover:border-zinc-600',
+                cfg.border,
+              )}
+            >
+              {/* Icon + summary */}
+              <div className="flex items-start gap-3 mb-3">
+                <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', cfg.bg)}>
+                  <Icon className={cn('h-4 w-4', cfg.text)} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wide mb-0.5">
+                    {cluster.cluster_name}
+                  </p>
+                  <p className="text-sm font-semibold text-zinc-100 leading-snug">
+                    {cluster.cluster_summary}
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer stats */}
+              <div className="flex items-center gap-2 pt-3 border-t border-zinc-800/60 flex-wrap">
+                <span className={cn('text-xs font-semibold tabular-nums', intentColor(cluster.avg_intent_score))}>
+                  {cluster.avg_intent_score} intent
+                </span>
+                <span className="text-zinc-700">·</span>
+                <span className="text-xs text-zinc-500 tabular-nums">
+                  {cluster.signal_count} {cluster.signal_count === 1 ? 'signal' : 'signals'}
+                </span>
+
+                {/* Top competitors or subreddits as context chips */}
+                {cluster.top_competitors.length > 0 && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="text-[10px] text-zinc-600 truncate">
+                      {cluster.top_competitors.slice(0, 2).join(', ')}
+                    </span>
+                  </>
+                )}
+                {cluster.top_competitors.length === 0 && cluster.top_subreddits.length > 0 && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="text-[10px] text-zinc-600 truncate">
+                      {cluster.top_subreddits.slice(0, 2).map((s) => `r/${s}`).join(', ')}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Opportunity Clusters card ─────────────────────────────────────────────────
 
 function ClustersCard({ clusters }: { clusters: Cluster[] }) {
@@ -392,6 +505,7 @@ function EmptyState({ hasProject }: { hasProject: boolean }) {
 export default function SignalsPage() {
   const { activeProject } = useAppStore();
   const [data, setData] = useState<SignalsData | null>(null);
+  const [intentClusters, setIntentClusters] = useState<IntentCluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -408,10 +522,17 @@ export default function SignalsPage() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/signals?project_id=${activeProject.id}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? 'Request failed');
-        setData(json);
+        // Parallel fetch: signals aggregation + intent clusters
+        const [signalsRes, clustersRes] = await Promise.all([
+          fetch(`/api/signals?project_id=${activeProject.id}`),
+          fetch(`/api/clusters?project_id=${activeProject.id}`),
+        ]);
+        const signalsJson = await signalsRes.json();
+        const clustersJson = await clustersRes.json();
+
+        if (!signalsRes.ok) throw new Error(signalsJson.error ?? 'Request failed');
+        setData(signalsJson);
+        setIntentClusters(clustersJson.clusters ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load signals');
       } finally {
@@ -498,7 +619,7 @@ export default function SignalsPage() {
         {!loading && hasProject && hasData && data && (
           <>
             {/* Stat row */}
-            <div className="grid grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-5 gap-3 mb-6">
               <StatBox
                 label="Leads Analysed"
                 value={data.meta.total_leads}
@@ -523,6 +644,12 @@ export default function SignalsPage() {
                 icon={TrendingUp}
                 color="text-emerald-400"
               />
+              <StatBox
+                label="Intent Clusters"
+                value={intentClusters.length}
+                icon={Sparkles}
+                color="text-emerald-400"
+              />
             </div>
 
             {/* Refreshing indicator */}
@@ -532,6 +659,9 @@ export default function SignalsPage() {
                 Refreshing signals…
               </div>
             )}
+
+            {/* Intent clusters — full-width above the 2-column grid */}
+            <IntentClustersSection clusters={intentClusters} />
 
             {/* 2-column grid */}
             <div className="grid grid-cols-2 gap-5">
