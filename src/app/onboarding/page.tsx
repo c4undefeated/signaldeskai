@@ -346,19 +346,20 @@ export default function OnboardingPage() {
           }),
         });
         const projData = await projRes.json();
-        if (projData.project?.id) {
-          projectId = projData.project.id;
-
-          // Re-run analysis with real project_id to persist profile
-          await fetch('/api/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: normalizeUrl(websiteUrl),
-              project_id: projectId,
-            }),
-          });
+        if (!projRes.ok || !projData.project?.id) {
+          throw new Error(projData.error || 'Failed to create project. Please try again.');
         }
+        projectId = projData.project.id;
+
+        // Re-run analysis with real project_id to persist profile
+        await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: normalizeUrl(websiteUrl),
+            project_id: projectId,
+          }),
+        });
       }
 
       const project = {
