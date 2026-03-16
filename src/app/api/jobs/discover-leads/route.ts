@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
                 : null,
               subreddit: post.subreddit,
               comment_count: post.num_comments,
+              upvotes: post.score,
             },
           ),
         })),
@@ -150,6 +151,7 @@ export async function POST(req: NextRequest) {
           score: scorePost(post.text, keywords, competitors, buyerIntentPhrases, {
             posted_at: post.created_at ?? null,
             comment_count: post.public_metrics?.reply_count ?? 0,
+            upvotes: post.public_metrics?.like_count ?? 0,
           }),
         })),
       ]
@@ -238,6 +240,7 @@ export async function POST(req: NextRequest) {
             competitor_bonus: score.competitor_bonus,
             unanswered_bonus: score.unanswered_bonus,
             final_score: score.final_score,
+            opportunity_score: score.opportunity_score,
             buying_signals: score.signals.buying_signals,
             pain_signals: score.signals.pain_signals,
             urgency_signals: score.signals.urgency_signals,

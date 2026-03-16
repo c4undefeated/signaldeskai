@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
       community_score:    score.community_score,
       competitor_bonus:   score.competitor_bonus,
       unanswered_bonus:   score.unanswered_bonus,
+      opportunity_score:  score.opportunity_score,
       buying_signals:     score.signals.buying_signals,
       pain_signals:       score.signals.pain_signals,
       urgency_signals:    score.signals.urgency_signals,
@@ -178,6 +179,7 @@ export async function POST(req: NextRequest) {
             : null,
           subreddit:     post.subreddit,
           comment_count: post.num_comments,
+          upvotes:       post.score,
         },
       );
       return {
@@ -197,6 +199,7 @@ export async function POST(req: NextRequest) {
           posted_at:     post.created_at ?? null,
           subreddit:     undefined,
           comment_count: post.public_metrics?.reply_count ?? 0,
+          upvotes:       post.public_metrics?.like_count ?? 0,
         },
       );
       return {
@@ -317,6 +320,7 @@ export async function POST(req: NextRequest) {
             competitor_bonus: lead.score.competitor_bonus,
             unanswered_bonus: lead.score.unanswered_bonus,
             final_score: lead.score.final_score,
+            opportunity_score: lead.score.opportunity_score,
             buying_signals: lead.score.buying_signals,
             pain_signals: lead.score.pain_signals,
             urgency_signals: lead.score.urgency_signals,

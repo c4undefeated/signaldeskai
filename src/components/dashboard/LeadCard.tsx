@@ -17,12 +17,14 @@ import {
   MessageCircle,
   Sparkles,
   StickyNote,
+  TrendingUp,
 } from 'lucide-react';
 import { cn, formatRelativeTime, getStatusColor, truncateText } from '@/lib/utils';
 import type { Lead, ReplySuggestion, WebsiteProfile } from '@/types';
 import { IntentScoreRing, ScoreBreakdown } from './IntentScore';
 import { LeadCRMPanel } from './LeadCRMPanel';
 import { OpportunityBadges } from './OpportunityBadges';
+import { getOpportunityLabel } from '@/lib/intent-scorer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
@@ -46,7 +48,9 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
   const { workspaceId, activeProject } = useAppStore();
 
   const score = lead.score;
-  const intentScore = (score as any)?.final_score ?? score?.intent_score ?? 0;
+  const intentScore = score?.final_score ?? score?.intent_score ?? 0;
+  const opportunityScore = score?.opportunity_score ?? 0;
+  const opportunityLabel = getOpportunityLabel(opportunityScore);
 
   const handleStatus = async (newStatus: Lead['status']) => {
     onStatusChange?.(lead.id, newStatus);
@@ -186,6 +190,24 @@ export function LeadCard({ lead, websiteProfile, onStatusChange, className }: Le
               <p className="text-xs text-zinc-500 leading-relaxed">
                 {truncateText(lead.body, 140)}
               </p>
+            )}
+
+            {/* Opportunity label */}
+            {opportunityScore > 0 && (
+              <div className="mt-2">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border',
+                    opportunityLabel === 'High'   && 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+                    opportunityLabel === 'Medium' && 'text-amber-400   bg-amber-500/10   border-amber-500/25',
+                    opportunityLabel === 'Low'    && 'text-zinc-500    bg-zinc-800       border-zinc-700/50',
+                  )}
+                >
+                  <TrendingUp className="h-2.5 w-2.5" />
+                  Opportunity: {opportunityLabel}
+                  <span className="opacity-50 font-normal ml-0.5">({opportunityScore})</span>
+                </span>
+              </div>
             )}
 
             {/* Opportunity indicators */}
