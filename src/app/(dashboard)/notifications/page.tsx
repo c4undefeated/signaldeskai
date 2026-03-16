@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Bell, Zap, Radio, AlertCircle, CheckCircle2, CheckCheck } from 'lucide-react';
+import { Bell, Zap, Radio, AlertCircle, CheckCircle2, CheckCheck, ExternalLink } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
@@ -137,7 +137,19 @@ export default function NotificationsPage() {
                       )}
                     </div>
                     <p className="text-xs text-zinc-500 leading-relaxed">{notification.message}</p>
-                    <p className="text-xs text-zinc-600 mt-1">{formatRelativeTime(notification.created_at)}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-xs text-zinc-600">{formatRelativeTime(notification.created_at)}</p>
+                      {notification.type === 'alert' && Array.isArray(notification.data?.lead_ids) && (notification.data.lead_ids as string[]).length > 0 && (
+                        <a
+                          href="/leads"
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                          View leads
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
