@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import type { Project, WebsiteProfile } from '@/types';
 
-type ProjectWithProfile = Project & { website_profiles?: WebsiteProfile[] };
+type ProjectWithProfile = Project & { workspace_id?: string; website_profiles?: WebsiteProfile[] };
 
 export function AppBootstrapProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -38,50 +38,35 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
 
       setUser(user.id, user.email ?? null);
 
-      // 2. Load workspace (use cached value if available)
-      let resolvedWorkspaceId = workspaceId;
-      if (!resolvedWorkspaceId) {
-        const wsRes = await fetch('/api/workspace', { method: 'POST' });
-        const wsData = await wsRes.json();
-        if (wsData.workspace?.id) {
-          resolvedWorkspaceId = wsData.workspace.id;
-          setWorkspaceId(wsData.workspace.id);
-          if (wsData.workspace.plan) {
-            setPlan(wsData.workspace.plan as 'free' | 'pro' | 'enterprise');
-          }
-        }
-      }
-
-      if (!resolvedWorkspaceId) {
-        setInitialized();
-        return;
-      }
-
-      // 3. Restore active project (use cached value if available)
+      // 2. Restore active project — query directly by user_id (most reliable path).
+      // We go project-first and derive workspace from the found project. This avoids
+      // the workspace-first approach which can fail silently and send users to onboarding
+      // even when their project exists.
       if (!activeProject) {
-        // Query by workspace_id if available; fall back to all user projects (RLS scoped)
-        const projectsUrl = resolvedWorkspaceId
-          ? `/api/projects?workspace_id=${resolvedWorkspaceId}`
-          : '/api/projects';
-        const projRes = await fetch(projectsUrl);
+        const projRes = await fetch('/api/projects');
         if (projRes.status === 401) {
           router.replace('/auth');
           return;
         }
-        const projData = await projRes.json();
-        let projects: ProjectWithProfile[] = projData.projects ?? [];
 
-        // If workspace-scoped query found nothing, retry without workspace filter
-        // (handles workspace ID mismatch from stale state)
-        if (projects.length === 0 && resolvedWorkspaceId) {
-          const fallbackRes = await fetch('/api/projects');
-          if (fallbackRes.ok) {
-            const fallbackData = await fallbackRes.json();
-            projects = fallbackData.projects ?? [];
-          }
+        let projects: ProjectWithProfile[] = [];
+        if (projRes.ok) {
+          const projData = await projRes.json();
+          projects = projData.projects ?? [];
         }
 
         if (projects.length === 0) {
+          // No projects found — ensure workspace exists, then send to onboarding
+          const wsRes = await fetch('/api/workspace', { method: 'POST' });
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            if (wsData.workspace?.id) {
+              setWorkspaceId(wsData.workspace.id);
+              if (wsData.workspace.plan) {
+                setPlan(wsData.workspace.plan as 'free' | 'pro' | 'enterprise');
+              }
+            }
+          }
           setInitialized();
           router.replace('/onboarding');
           return;
@@ -89,6 +74,31 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
 
         const project = projects[0];
         setActiveProject(project);
+
+        // 3. Derive workspace from the project (avoid a separate workspace round-trip
+        //    if we already know the workspace_id from the project row)
+        const projectWorkspaceId = project.workspace_id;
+        if (projectWorkspaceId && !workspaceId) {
+          setWorkspaceId(projectWorkspaceId);
+          // Fetch plan details for the workspace
+          const wsRes = await fetch(`/api/workspace?id=${projectWorkspaceId}`);
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            if (wsData.plan) setPlan(wsData.plan as 'free' | 'pro' | 'enterprise');
+          }
+        } else if (!workspaceId) {
+          // Project has no workspace_id — ensure one exists and associate it
+          const wsRes = await fetch('/api/workspace', { method: 'POST' });
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            if (wsData.workspace?.id) {
+              setWorkspaceId(wsData.workspace.id);
+              if (wsData.workspace.plan) {
+                setPlan(wsData.workspace.plan as 'free' | 'pro' | 'enterprise');
+              }
+            }
+          }
+        }
 
         // 4. Restore website profile from joined data
         const profiles = project.website_profiles;
@@ -98,8 +108,7 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         if (profile) {
           setWebsiteProfile(profile);
         } else if (project.website_url) {
-          // Profile missing from DB (e.g. created before profile-persist was fixed).
-          // Re-analyze silently in the background so leads can work immediately.
+          // Profile missing from DB — re-analyze silently in background
           fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -131,6 +140,28 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
             })
             .catch(() => {}); // non-critical
         }
+      } else if (!workspaceId) {
+        // activeProject is cached but workspaceId got cleared — restore it
+        const cachedWorkspaceId = (activeProject as ProjectWithProfile).workspace_id;
+        if (cachedWorkspaceId) {
+          setWorkspaceId(cachedWorkspaceId);
+          const wsRes = await fetch(`/api/workspace?id=${cachedWorkspaceId}`);
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            if (wsData.plan) setPlan(wsData.plan as 'free' | 'pro' | 'enterprise');
+          }
+        } else {
+          const wsRes = await fetch('/api/workspace', { method: 'POST' });
+          if (wsRes.ok) {
+            const wsData = await wsRes.json();
+            if (wsData.workspace?.id) {
+              setWorkspaceId(wsData.workspace.id);
+              if (wsData.workspace.plan) {
+                setPlan(wsData.workspace.plan as 'free' | 'pro' | 'enterprise');
+              }
+            }
+          }
+        }
       }
 
       // 5. Load unread notification count (non-critical)
@@ -151,14 +182,13 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
 
     // Listen for auth state changes across the dashboard
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event) => {
         if (event === 'SIGNED_OUT') {
           reset();
           router.replace('/auth');
         }
         // SIGNED_IN fires immediately on subscription with the current session —
         // skip it here because bootstrap() already handles the initial load above.
-        // Only react to TOKEN_REFRESHED to keep server-side cookies fresh.
       }
     );
 

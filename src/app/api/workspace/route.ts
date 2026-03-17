@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (existing?.workspace_id) {
     // If the join returned the workspace object, return it directly
