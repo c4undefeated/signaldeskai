@@ -27,7 +27,6 @@ export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const project_id = params.get('project_id');
   const source = params.get('source');
-  const min_score = parseInt(params.get('min_score') || '0');
   const limit = Math.min(parseInt(params.get('limit') || '50'), 100);
   const offset = parseInt(params.get('offset') || '0');
 
@@ -35,8 +34,9 @@ export async function GET(req: NextRequest) {
 
   const query = supabase
     .from('leads')
-    .select('*, lead_scores(*), lead_statuses(*)', { count: 'exact' })
+    .select('*, lead_scores(*)', { count: 'exact' })
     .eq('project_id', project_id)
+    .neq('status', 'dismissed')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -45,7 +45,17 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ leads: data || [], total: count });
+  // Normalize: promote lead_scores[0] → score so LeadCard can render without changes
+  const leads = (data || []).map((lead: Record<string, unknown>) => {
+    const scores = lead.lead_scores as unknown[] | undefined;
+    return {
+      ...lead,
+      score: Array.isArray(scores) && scores.length > 0 ? scores[0] : undefined,
+      lead_scores: undefined,
+    };
+  });
+
+  return NextResponse.json({ leads, total: count });
 }
 
 // ── POST /api/leads — discover & rank new leads (multi-source) ─
